@@ -1,0 +1,254 @@
+package com.traffic.alert.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.traffic.alert.common.BusinessException;
+import com.traffic.alert.common.PageResult;
+import com.traffic.alert.dto.AiEventCallbackRequest;
+import com.traffic.alert.dto.AlertEventQuery;
+import com.traffic.alert.dto.FalsePositiveRequest;
+import com.traffic.alert.entity.AlertEvent;
+import com.traffic.alert.entity.Camera;
+import com.traffic.alert.entity.Department;
+import com.traffic.alert.entity.WorkOrder;
+import com.traffic.alert.mapper.AlertEventMapper;
+import com.traffic.alert.websocket.AlertWebSocket;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.ByteArrayInputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AlertEventService {
+
+    private final AlertEventMapper alertEventMapper;
+    private final CameraService cameraService;
+    private final DepartmentService departmentService;
+    private final WorkOrderService workOrderService;
+    private final MinioService minioService;
+    private final NotificationService notificationService;
+
+    private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    public AlertEvent getById(Long id) {
+        return alertEventMapper.selectById(id);
+    }
+
+    public PageResult<AlertEvent> page(AlertEventQuery query) {
+        Page<AlertEvent> page = new Page<>(query.getCurrent(), query.getSize());
+        LambdaQueryWrapper<AlertEvent> wrapper = new LambdaQueryWrapper<>();
+        if (query.getKeyword() != null && !query.getKeyword().isEmpty()) {
+            wrapper.like(AlertEvent::getEventNo, query.getKeyword())
+                    .or().like(AlertEvent::getDescription, query.getKeyword());
+        }
+        if (query.getEventType() != null && !query.getEventType().isEmpty()) {
+            wrapper.eq(AlertEvent::getEventType, query.getEventType());
+        }
+        if (query.getEventLevel() != null) {
+            wrapper.eq(AlertEvent::getEventLevel, query.getEventLevel());
+        }
+        if (query.getAlertStatus() != null) {
+            wrapper.eq(AlertEvent::getAlertStatus, query.getAlertStatus());
+        }
+        if (query.getCameraId() != null) {
+            wrapper.eq(AlertEvent::getCameraId, query.getCameraId());
+        }
+        if (query.getStartTime() != null) {
+            wrapper.ge(AlertEvent::getEventTime, query.getStartTime());
+        }
+        if (query.getEndTime() != null) {
+            wrapper.le(AlertEvent::getEventTime, query.getEndTime());
+        }
+        if (query.getIsFalsePositive() != null) {
+            wrapper.eq(AlertEvent::getIsFalsePositive, query.getIsFalsePositive());
+        }
+        wrapper.orderByDesc(AlertEvent::getEventTime);
+        alertEventMapper.selectPage(page, wrapper);
+        return PageResult.of(page.getTotal(), page.getRecords(), page.getCurrent(), page.getSize());
+    }
+
+    @Transactional
+    public AlertEvent handleAiEventCallback(AiEventCallbackRequest request) {
+        Camera camera = cameraService.getById(request.getCameraId());
+        if (camera == null) {
+            throw new BusinessException("摄像头不存在");
+        }
+
+        String eventNo = "EVT" + LocalDateTime.now().format(EVENT_NO_FORMATTER) +
+                String.format("%04d", (int) (Math.random() * 10000));
+
+        AlertEvent event = new AlertEvent();
+        event.setEventNo(eventNo);
+        event.setEventType(request.getEventType());
+        event.setEventLevel(request.getEventLevel() != null ? request.getEventLevel() : 1);
+        event.setCameraId(camera.getId());
+        event.setCameraName(camera.getCameraName());
+        event.setLocation(camera.getLocation());
+        event.setLongitude(camera.getLongitude());
+        event.setLatitude(camera.getLatitude());
+        event.setEventTime(request.getEventTime() != null ? request.getEventTime() : LocalDateTime.now());
+        event.setConfidence(request.getConfidence() != null ?
+                request.getConfidence().setScale(4, RoundingMode.HALF_UP) : BigDecimal.valueOf(0.9));
+        event.setDescription(request.getDescription());
+        event.setAlertStatus(0);
+        event.setIsFalsePositive(0);
+
+        if (request.getSnapshotBase64() != null && !request.getSnapshotBase64().isEmpty()) {
+            try {
+                byte[] imageBytes = Base64.getDecoder().decode(request.getSnapshotBase64());
+                String objectName = "snapshots/" + eventNo + ".jpg";
+                String snapshotUrl = minioService.uploadFile(
+                        objectName,
+                        new ByteArrayInputStream(imageBytes),
+                        imageBytes.length,
+                        "image/jpeg"
+                );
+                event.setEventSnapshot(snapshotUrl);
+            } catch (Exception e) {
+                log.error("保存事件快照失败: {}", e.getMessage());
+            }
+        }
+
+        alertEventMapper.insert(event);
+        log.info("创建交通告警事件: eventNo={}, type={}, camera={}",
+                eventNo, request.getEventType(), camera.getCameraName());
+
+        AlertWebSocket.sendAlertMessage(event);
+        notificationService.sendAlertNotification(event);
+
+        if (event.getEventLevel() != null && event.getEventLevel() >= 2) {
+            autoCreateWorkOrder(event);
+        }
+
+        return event;
+    }
+
+    private void autoCreateWorkOrder(AlertEvent event) {
+        try {
+            Department nearestDept = departmentService.findNearestDepartment(
+                    event.getLongitude(), event.getLatitude(),
+                    "ACCIDENT".equals(event.getEventType()) ? 2 : 1
+            );
+
+            if (nearestDept != null) {
+                WorkOrder workOrder = new WorkOrder();
+                workOrder.setOrderNo("WO" + LocalDateTime.now().format(EVENT_NO_FORMATTER) +
+                        String.format("%04d", (int) (Math.random() * 10000)));
+                workOrder.setAlertEventId(event.getId());
+                workOrder.setEventType(event.getEventType());
+                workOrder.setOrderLevel(event.getEventLevel());
+
+                String typeText = switch (event.getEventType()) {
+                    case "ACCIDENT" -> "交通事故";
+                    case "REVERSE" -> "车辆逆行";
+                    case "DEBRIS" -> "路面抛洒物";
+                    default -> event.getEventType();
+                };
+                workOrder.setTitle(typeText + "处置工单 - " + event.getCameraName());
+                workOrder.setDescription(event.getDescription());
+                workOrder.setAssignDeptId(nearestDept.getId());
+                workOrder.setAssignDeptName(nearestDept.getDeptName());
+                workOrder.setOrderStatus(0);
+                workOrder.setPlanStartTime(LocalDateTime.now());
+                workOrder.setPlanEndTime(LocalDateTime.now().plusHours(2));
+
+                workOrderService.save(workOrder);
+                log.info("自动生成工单: orderNo={}, dept={}", workOrder.getOrderNo(), nearestDept.getDeptName());
+            }
+        } catch (Exception e) {
+            log.error("自动生成工单失败: {}", e.getMessage());
+        }
+    }
+
+    @Transactional
+    public AlertEvent markAsHandled(Long id, Long userId, String remark) {
+        AlertEvent event = getById(id);
+        if (event == null) {
+            throw new BusinessException("告警事件不存在");
+        }
+        event.setAlertStatus(1);
+        event.setHandleUserId(userId);
+        event.setHandleTime(LocalDateTime.now());
+        event.setHandleRemark(remark);
+        alertEventMapper.updateById(event);
+        return event;
+    }
+
+    @Transactional
+    public AlertEvent markAsFalsePositive(Long id, FalsePositiveRequest request) {
+        AlertEvent event = getById(id);
+        if (event == null) {
+            throw new BusinessException("告警事件不存在");
+        }
+        event.setIsFalsePositive(1);
+        event.setFalsePositiveReason(request.getReason());
+        event.setAlertStatus(2);
+        alertEventMapper.updateById(event);
+        log.info("标记误报: eventId={}, reason={}", id, request.getReason());
+        return event;
+    }
+
+    public Map<String, Object> getStatistics() {
+        LocalDateTime today = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime weekAgo = today.minusDays(7);
+
+        Long todayCount = alertEventMapper.selectCount(new LambdaQueryWrapper<AlertEvent>()
+                .ge(AlertEvent::getEventTime, today));
+        Long weekCount = alertEventMapper.selectCount(new LambdaQueryWrapper<AlertEvent>()
+                .ge(AlertEvent::getEventTime, weekAgo));
+        Long totalCount = alertEventMapper.selectCount(new LambdaQueryWrapper<>());
+
+        Long accidentCount = alertEventMapper.selectCount(new LambdaQueryWrapper<AlertEvent>()
+                .eq(AlertEvent::getEventType, "ACCIDENT"));
+        Long reverseCount = alertEventMapper.selectCount(new LambdaQueryWrapper<AlertEvent>()
+                .eq(AlertEvent::getEventType, "REVERSE"));
+        Long debrisCount = alertEventMapper.selectCount(new LambdaQueryWrapper<AlertEvent>()
+                .eq(AlertEvent::getEventType, "DEBRIS"));
+
+        Long pendingCount = alertEventMapper.selectCount(new LambdaQueryWrapper<AlertEvent>()
+                .eq(AlertEvent::getAlertStatus, 0));
+        Long falsePositiveCount = alertEventMapper.selectCount(new LambdaQueryWrapper<AlertEvent>()
+                .eq(AlertEvent::getIsFalsePositive, 1));
+
+        return Map.of(
+                "todayCount", todayCount,
+                "weekCount", weekCount,
+                "totalCount", totalCount,
+                "accidentCount", accidentCount,
+                "reverseCount", reverseCount,
+                "debrisCount", debrisCount,
+                "pendingCount", pendingCount,
+                "falsePositiveCount", falsePositiveCount
+        );
+    }
+
+    public List<AlertEvent> getRecentEvents(int limit) {
+        return alertEventMapper.selectList(new LambdaQueryWrapper<AlertEvent>()
+                .orderByDesc(AlertEvent::getEventTime)
+                .last("LIMIT " + limit));
+    }
+
+    public String uploadEventSnapshot(Long eventId, MultipartFile file) {
+        AlertEvent event = getById(eventId);
+        if (event == null) {
+            throw new BusinessException("告警事件不存在");
+        }
+        String objectName = "snapshots/" + event.getEventNo() + "_" + System.currentTimeMillis() + ".jpg";
+        String url = minioService.uploadFile(objectName, file);
+        event.setEventSnapshot(url);
+        alertEventMapper.updateById(event);
+        return url;
+    }
+}

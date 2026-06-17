@@ -1,0 +1,197 @@
+import time
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, status
+
+from app.config.settings import settings
+from app.core.event_analyzer import event_analyzer
+from app.core.tracker import get_tracker
+from app.schemas.event import (
+    EventDetectionRequest,
+    EventDetectionResponse,
+    EventQueryRequest,
+    EventQueryResponse,
+    TrafficEvent,
+    EventType,
+    EventSeverity
+)
+
+router = APIRouter()
+
+detected_events: List[TrafficEvent] = []
+
+
+@router.post("/analyze", response_model=EventDetectionResponse)
+async def analyze_events(request: EventDetectionRequest):
+    start_time = time.time()
+
+    events = event_analyzer.analyze(
+        camera_id=request.camera_id or request.frame_id,
+        tracked_objects=request.tracked_objects
+    )
+
+    detected_events.extend(events)
+    if len(detected_events) > 1000:
+        detected_events[:] = detected_events[-1000:]
+
+    processing_time = time.time() - start_time
+
+    return EventDetectionResponse(
+        frame_id=request.frame_id,
+        events=events,
+        processing_time=round(processing_time, 4)
+    )
+
+
+@router.post("/query", response_model=EventQueryResponse)
+async def query_events(request: EventQueryRequest):
+    filtered_events = detected_events
+
+    if request.event_type:
+        filtered_events = [
+            e for e in filtered_events
+            if e.event_type == request.event_type
+        ]
+
+    if request.severity:
+        filtered_events = [
+            e for e in filtered_events
+            if e.severity == request.severity
+        ]
+
+    if request.start_time:
+        filtered_events = [
+            e for e in filtered_events
+            if e.timestamp >= request.start_time
+        ]
+
+    if request.end_time:
+        filtered_events = [
+            e for e in filtered_events
+            if e.timestamp <= request.end_time
+        ]
+
+    if request.camera_id:
+        filtered_events = [
+            e for e in filtered_events
+            if e.location and e.location.camera_id == request.camera_id
+        ]
+
+    total = len(filtered_events)
+
+    if request.limit and request.limit > 0:
+        filtered_events = filtered_events[-request.limit:]
+
+    return EventQueryResponse(
+        events=list(reversed(filtered_events)),
+        total=total
+    )
+
+
+@router.get("/types")
+async def get_event_types():
+    return {
+        "event_types": [
+            {"value": e.value, "label": {
+                "ACCIDENT": "交通事故",
+                "REVERSE": "车辆逆行",
+                "DEBRIS": "路面抛洒物",
+                "speeding": "超速行驶",
+                "red_light": "闯红灯",
+                "wrong_way": "逆行",
+                "illegal_parking": "违法停车",
+                "pedestrian_crossing": "行人横穿",
+                "traffic_congestion": "交通拥堵"
+            }.get(e.value, e.value)}
+            for e in EventType
+        ],
+        "severities": [
+            {"value": s.value, "label": {
+                1: "一般",
+                2: "严重",
+                3: "紧急",
+                4: "特急"
+            }.get(s.value, s.name)}
+            for s in EventSeverity
+        ],
+        "confidence_threshold": settings.EVENT_CONFIDENCE_THRESHOLD
+    }
+
+
+@router.get("/{event_id}", response_model=TrafficEvent)
+async def get_event(event_id: str):
+    for event in detected_events:
+        if event.event_id == event_id:
+            return event
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Event {event_id} not found"
+    )
+
+
+@router.get("/", response_model=EventQueryResponse)
+async def list_events(
+    event_type: Optional[EventType] = None,
+    severity: Optional[EventSeverity] = None,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    camera_id: Optional[str] = None,
+    limit: Optional[int] = 100
+):
+    request = EventQueryRequest(
+        event_type=event_type,
+        severity=severity,
+        start_time=start_time,
+        end_time=end_time,
+        camera_id=camera_id,
+        limit=limit
+    )
+    return await query_events(request)
+
+
+@router.delete("/{event_id}")
+async def delete_event(event_id: str):
+    global detected_events
+
+    for i, event in enumerate(detected_events):
+        if event.event_id == event_id:
+            del detected_events[i]
+            return {"status": "success", "message": f"Event {event_id} deleted"}
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Event {event_id} not found"
+    )
+
+
+@router.get("/statistics/summary")
+async def get_event_statistics():
+    stats = {
+        "total_events": len(detected_events),
+        "by_type": {},
+        "by_severity": {},
+        "last_hour": 0,
+        "last_24h": 0
+    }
+
+    now = datetime.now()
+    one_hour_ago = now.timestamp() - 3600
+    one_day_ago = now.timestamp() - 86400
+
+    for event in detected_events:
+        et = event.event_type.value
+        stats["by_type"][et] = stats["by_type"].get(et, 0) + 1
+
+        sv = event.severity.value
+        sv_label = {1: "low", 2: "medium", 3: "high", 4: "critical"}.get(sv, str(sv))
+        stats["by_severity"][sv_label] = stats["by_severity"].get(sv_label, 0) + 1
+
+        event_ts = event.timestamp.timestamp()
+        if event_ts >= one_hour_ago:
+            stats["last_hour"] += 1
+        if event_ts >= one_day_ago:
+            stats["last_24h"] += 1
+
+    return stats

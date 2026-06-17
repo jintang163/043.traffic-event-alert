@@ -1,0 +1,152 @@
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { message } from 'antd';
+import type { Result } from '@/types';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+const request: AxiosInstance = axios.create({
+  baseURL: BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+request.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+request.interceptors.response.use(
+  (response: AxiosResponse<Result<any>>) => {
+    const { data } = response;
+    if (data.code !== 200) {
+      message.error(data.message || '请求失败');
+      if (data.code === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
+      return Promise.reject(new Error(data.message));
+    }
+    return data;
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    message.error(error.message || '网络错误');
+    return Promise.reject(error);
+  }
+);
+
+export const authApi = {
+  login: (data: { username: string; password: string }) =>
+    request.post<any, Result<any>>('/api/auth/login', data),
+  getCurrentUser: () =>
+    request.get<any, Result<any>>('/api/auth/me'),
+};
+
+export const cameraApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/cameras/page', { params }),
+  list: () =>
+    request.get<any, Result<any>>('/api/cameras/list'),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/cameras/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/cameras', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/cameras/${id}`),
+  getStream: (id: number) =>
+    request.get<any, Result<any>>(`/api/cameras/${id}/stream`),
+  ptzControl: (id: number, data: any) =>
+    request.post<any, Result<any>>(`/api/cameras/${id}/ptz`, data),
+  statistics: () =>
+    request.get<any, Result<any>>('/api/cameras/statistics'),
+};
+
+export const alertApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/alerts/page', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/alerts/${id}`),
+  handle: (id: number, remark?: string) =>
+    request.post<any, Result<any>>(`/api/alerts/${id}/handle`, null, { params: { remark } }),
+  markFalsePositive: (id: number, data: { reason: string }) =>
+    request.post<any, Result<any>>(`/api/alerts/${id}/false-positive`, data),
+  statistics: () =>
+    request.get<any, Result<any>>('/api/alerts/statistics'),
+  recent: (limit = 10) =>
+    request.get<any, Result<any>>('/api/alerts/recent', { params: { limit } }),
+  uploadSnapshot: (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request.post<any, Result<any>>(`/api/alerts/${id}/snapshot`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+};
+
+export const workOrderApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/work-orders/page', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/work-orders/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/work-orders', data),
+  handle: (id: number, data: any) =>
+    request.post<any, Result<any>>(`/api/work-orders/${id}/handle`, data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/work-orders/${id}`),
+  listByAlert: (alertEventId: number) =>
+    request.get<any, Result<any>>(`/api/work-orders/alert/${alertEventId}`),
+  statistics: () =>
+    request.get<any, Result<any>>('/api/work-orders/statistics'),
+};
+
+export const departmentApi = {
+  list: (deptType?: number) =>
+    request.get<any, Result<any>>('/api/departments/list', { params: { deptType } }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/departments/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/departments', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/departments/${id}`),
+  findNearest: (longitude: number, latitude: number, deptType?: number) =>
+    request.get<any, Result<any>>('/api/departments/nearest', { params: { longitude, latitude, deptType } }),
+};
+
+export const statisticsApi = {
+  overview: () =>
+    request.get<any, Result<any>>('/api/statistics/overview'),
+};
+
+export const aiApi = {
+  detectImage: (file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return request.post<any, Result<any>>('/api/ai/detect/image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  startStreamDetection: (data: { cameraId: number; streamUrl?: string }) =>
+    request.post<any, Result<any>>('/api/ai/detect/stream/start', data),
+  stopStreamDetection: (cameraId: number) =>
+    request.post<any, Result<any>>(`/api/ai/detect/stream/${cameraId}/stop`),
+  eventCallback: (data: any) =>
+    request.post<any, Result<any>>('/api/ai/event/callback', data),
+};
+
+export default request;

@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+ultralytics
+opencv-python-headless
+numpy
+pillow
+pydantic
+httpx
+python-multipart
+redis
+pyyaml
+filterpy
+scikit-learn
+torch
+torchvision

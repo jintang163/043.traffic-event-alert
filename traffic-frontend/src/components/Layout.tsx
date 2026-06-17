@@ -1,0 +1,176 @@
+import React, { useState, useEffect } from 'react';
+import { Layout as AntLayout, Menu, Avatar, Dropdown, Badge, Button } from 'antd';
+import {
+  DashboardOutlined,
+  VideoCameraOutlined,
+  BellOutlined,
+  FileTextOutlined,
+  TeamOutlined,
+  SettingOutlined,
+  LogoutOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
+import { useAlertStore } from '@/store/alertStore';
+import { wsService } from '@/services/websocket';
+import type { MenuProps } from 'antd';
+
+const { Header, Sider, Content } = AntLayout;
+
+interface LayoutProps {
+  children: React.ReactNode;
+}
+
+const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, logout } = useAuthStore();
+  const { unreadCount, addAlert, markAllRead } = useAlertStore();
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      wsService.connect(user.id);
+      const unsub = wsService.onAlert((alert) => {
+        addAlert(alert as any);
+      });
+      return () => {
+        unsub();
+        wsService.disconnect();
+      };
+    }
+  }, [user, addAlert]);
+
+  const menuItems: MenuProps['items'] = [
+    {
+      key: '/',
+      icon: <DashboardOutlined />,
+      label: '监控大屏',
+    },
+    {
+      key: '/cameras',
+      icon: <VideoCameraOutlined />,
+      label: '摄像头管理',
+    },
+    {
+      key: '/alerts',
+      icon: (
+        <Badge count={unreadCount} size="small" offset={[8, -2]}>
+          <BellOutlined />
+        </Badge>
+      ),
+      label: '告警中心',
+    },
+    {
+      key: '/work-orders',
+      icon: <FileTextOutlined />,
+      label: '工单管理',
+    },
+    {
+      key: '/departments',
+      icon: <TeamOutlined />,
+      label: '部门管理',
+    },
+  ];
+
+  const handleMenuClick = ({ key }: { key: string }) => {
+    navigate(key);
+    if (key === '/alerts') {
+      markAllRead();
+    }
+  };
+
+  const userMenuItems: MenuProps['items'] = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: '个人中心',
+    },
+    { type: 'divider' },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: '退出登录',
+      onClick: () => {
+        logout();
+        wsService.disconnect();
+        navigate('/login');
+      },
+    },
+  ];
+
+  return (
+    <AntLayout style={{ minHeight: '100vh' }}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        theme="dark"
+        width={220}
+      >
+        <div
+          style={{
+            height: 64,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontSize: collapsed ? 16 : 18,
+            fontWeight: 600,
+            background: 'rgba(24, 144, 255, 0.2)',
+            margin: 12,
+            borderRadius: 8,
+          }}
+        >
+          {collapsed ? '🚦' : '🚦 交通事件检测'}
+        </div>
+        <Menu
+          theme="dark"
+          mode="inline"
+          selectedKeys={[location.pathname]}
+          items={menuItems}
+          onClick={handleMenuClick}
+          style={{ borderRight: 0 }}
+        />
+      </Sider>
+      <AntLayout>
+        <Header
+          style={{
+            background: '#fff',
+            padding: '0 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 1px 4px rgba(0,21,41,.08)',
+          }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 500, color: '#1f2937' }}>
+            高速公路交通事件智能检测平台
+          </div>
+          <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Avatar icon={<UserOutlined />} style={{ background: '#1890ff' }}>
+                {user?.nickname?.[0]}
+              </Avatar>
+              <span style={{ color: '#333' }}>{user?.nickname || user?.username}</span>
+            </div>
+          </Dropdown>
+        </Header>
+        <Content
+          style={{
+            margin: 16,
+            padding: 24,
+            background: '#f5f7fa',
+            minHeight: 'calc(100vh - 96px)',
+            borderRadius: 8,
+          }}
+        >
+          {children}
+        </Content>
+      </AntLayout>
+    </AntLayout>
+  );
+};
+
+export default Layout;

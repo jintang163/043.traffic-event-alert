@@ -1,0 +1,93 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: traffic-alert
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/traffic_alert?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+minio:
+  endpoint: http://localhost:9000
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucketName: traffic-alert
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.traffic.alert.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+jwt:
+  secret: traffic-alert-secret-key-2024-abcdefghijklmnopqrstuvwxyz
+  expiration: 86400000
+  header: Authorization
+  prefix: Bearer
+
+ai:
+  engine:
+    baseUrl: http://localhost:8000
+    detectPath: /api/v1/detect/image
+    streamPath: /api/v1/detect/stream
+    trackPath: /api/v1/track
+    eventPath: /api/v1/event/analyze
+    connectTimeout: 5000
+    readTimeout: 30000
+
+notification:
+  dingTalk:
+    enabled: false
+    webhook: https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN
+    secret: YOUR_SECRET
+  weChat:
+    enabled: false
+    webhook: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
+  sms:
+    enabled: false
+    apiUrl: https://sms.example.com/api/send
+    apiKey: YOUR_API_KEY
+    templateId: YOUR_TEMPLATE_ID
+
+logging:
+  level:
+    com.traffic.alert: debug
+    org.springframework.security: info
