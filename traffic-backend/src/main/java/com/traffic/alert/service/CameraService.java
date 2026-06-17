@@ -326,4 +326,40 @@ public class CameraService {
                 "ptzEnabled", ptzEnabled
         );
     }
+
+    public boolean gotoPreset(Long cameraId, Integer presetIndex) {
+        Camera camera = getById(cameraId);
+        if (camera == null || camera.getPtzEnabled() == null || camera.getPtzEnabled() != 1) {
+            return false;
+        }
+        PtzControlRequest request = new PtzControlRequest();
+        request.setCommand("gotoPreset");
+        request.setPresetIndex(presetIndex);
+        request.setSpeed(5);
+        try {
+            Map<String, Object> result = ptzControl(cameraId, request);
+            return Boolean.TRUE.equals(result.get("sdkExecuted")) || Boolean.TRUE.equals(result.get("success"));
+        } catch (Exception e) {
+            log.warn("调用预置位失败: cameraId={}, presetIndex={}, err={}", cameraId, presetIndex, e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean setPreset(Long cameraId, Integer presetIndex, String presetName) {
+        Camera camera = getById(cameraId);
+        if (camera == null || camera.getPtzEnabled() == null || camera.getPtzEnabled() != 1) {
+            return false;
+        }
+        PtzControlRequest request = new PtzControlRequest();
+        request.setCommand("setPreset");
+        request.setPresetIndex(presetIndex);
+        request.setPresetName(presetName);
+        try {
+            Map<String, Object> result = ptzControl(cameraId, request);
+            return Boolean.TRUE.equals(result.get("sdkExecuted")) || Boolean.TRUE.equals(result.get("success"));
+        } catch (Exception e) {
+            log.warn("设置预置位失败: cameraId={}, presetIndex={}, err={}", cameraId, presetIndex, e.getMessage());
+            return false;
+        }
+    }
 }

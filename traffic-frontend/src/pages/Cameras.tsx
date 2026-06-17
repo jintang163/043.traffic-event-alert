@@ -37,6 +37,8 @@ import {
   PlayCircleOutlined,
 } from '@ant-design/icons';
 import VideoPlayer from '@/components/VideoPlayer';
+import PtzPanel from '@/components/PtzPanel';
+import PtzCruisePanel from '@/components/PtzCruisePanel';
 import { cameraApi } from '@/services/api';
 import {
   CAMERA_STATUS_LABELS,
@@ -446,50 +448,59 @@ const Cameras: React.FC = () => {
         open={viewModal}
         onCancel={() => setViewModal(false)}
         footer={null}
-        width={900}
+        width={1200}
         destroyOnClose
       >
         {viewCamera && (
-          <div>
-            <VideoPlayer
-              url={viewCamera.streamUrl}
-              cameraId={viewCamera.id}
-              cameraName={viewCamera.cameraName}
-              height={450}
-              showControls
-            />
-            <Card size="small" style={{ marginTop: 12 }}>
-              <Row gutter={16}>
-                <Col span={8}>
-                  <div>
-                    <strong>编号：</strong>{viewCamera.cameraCode}
-                  </div>
-                </Col>
-                <Col span={8}>
-                  <div>
-                    <strong>协议：</strong>{viewCamera.protocol}
-                  </div>
-                </Col>
-                <Col span={8}>
-                  <div>
-                    <strong>厂商：</strong>{viewCamera.manufacturer || '-'}
-                  </div>
-                </Col>
-                <Col span={24} style={{ marginTop: 8 }}>
-                  <div>
-                    <strong>位置：</strong>{viewCamera.location || viewCamera.roadName || '-'}
-                  </div>
-                </Col>
-                {viewCamera.longitude && viewCamera.latitude && (
-                  <Col span={24} style={{ marginTop: 8 }}>
+          <Row gutter={16}>
+            <Col span={viewCamera.ptzEnabled === 1 ? 16 : 24}>
+              <VideoPlayer
+                url={viewCamera.streamUrl}
+                cameraId={viewCamera.id}
+                cameraName={viewCamera.cameraName}
+                height={450}
+                showControls
+              />
+              <Card size="small" style={{ marginTop: 12 }}>
+                <Row gutter={16}>
+                  <Col span={8}>
                     <div>
-                      <strong>坐标：</strong>{viewCamera.longitude}, {viewCamera.latitude}
+                      <strong>编号：</strong>{viewCamera.cameraCode}
                     </div>
                   </Col>
-                )}
-              </Row>
-            </Card>
-          </div>
+                  <Col span={8}>
+                    <div>
+                      <strong>协议：</strong>{viewCamera.protocol}
+                    </div>
+                  </Col>
+                  <Col span={8}>
+                    <div>
+                      <strong>厂商：</strong>{viewCamera.manufacturer || '-'}
+                    </div>
+                  </Col>
+                  <Col span={24} style={{ marginTop: 8 }}>
+                    <div>
+                      <strong>位置：</strong>{viewCamera.location || viewCamera.roadName || '-'}
+                    </div>
+                  </Col>
+                  {viewCamera.longitude && viewCamera.latitude && (
+                    <Col span={24} style={{ marginTop: 8 }}>
+                      <div>
+                        <strong>坐标：</strong>{viewCamera.longitude}, {viewCamera.latitude}
+                      </div>
+                    </Col>
+                  )}
+                </Row>
+              </Card>
+            </Col>
+            {viewCamera.ptzEnabled === 1 && (
+              <Col span={8}>
+                <PtzPanel cameraId={viewCamera.id} ptzEnabled={viewCamera.ptzEnabled} />
+                <div style={{ height: 12 }} />
+                <PtzCruisePanel cameraId={viewCamera.id} ptzEnabled={viewCamera.ptzEnabled} />
+              </Col>
+            )}
+          </Row>
         )}
       </Modal>
     </div>

@@ -15,6 +15,8 @@ import { statisticsApi, alertApi, cameraApi } from '@/services/api';
 import { wsService } from '@/services/websocket';
 import { useAlertStore } from '@/store/alertStore';
 import VideoPlayer from '@/components/VideoPlayer';
+import PtzPanel from '@/components/PtzPanel';
+import PtzCruisePanel from '@/components/PtzCruisePanel';
 import {
   EVENT_TYPE_LABELS,
   EVENT_LEVEL_LABELS,
@@ -244,16 +246,27 @@ const Dashboard: React.FC = () => {
         open={videoModal}
         onCancel={() => setVideoModal(false)}
         footer={null}
-        width={900}
+        width={1200}
       >
         {selectedCamera && (
-          <VideoPlayer
-            url={selectedCamera.streamUrl}
-            cameraId={selectedCamera.id}
-            cameraName={selectedCamera.cameraName}
-            height={500}
-            showControls
-          />
+          <Row gutter={16}>
+            <Col span={selectedCamera.ptzEnabled === 1 ? 16 : 24}>
+              <VideoPlayer
+                url={selectedCamera.streamUrl}
+                cameraId={selectedCamera.id}
+                cameraName={selectedCamera.cameraName}
+                height={500}
+                showControls
+              />
+            </Col>
+            {selectedCamera.ptzEnabled === 1 && (
+              <Col span={8}>
+                <PtzPanel cameraId={selectedCamera.id} ptzEnabled={selectedCamera.ptzEnabled} />
+                <div style={{ height: 12 }} />
+                <PtzCruisePanel cameraId={selectedCamera.id} ptzEnabled={selectedCamera.ptzEnabled} />
+              </Col>
+            )}
+          </Row>
         )}
       </Modal>
     </div>

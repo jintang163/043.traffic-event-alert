@@ -39,6 +39,7 @@ public class AlertEventService {
     private final WorkOrderService workOrderService;
     private final MinioService minioService;
     private final NotificationService notificationService;
+    private final PtzCruiseService ptzCruiseService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -135,6 +136,11 @@ public class AlertEventService {
         notificationService.sendAlertNotification(event);
 
         if (event.getEventLevel() != null && event.getEventLevel() >= 2) {
+            ptzCruiseService.pauseCruiseForEvent(camera.getId());
+            log.info("事件联动暂停巡航: cameraId={}, eventNo={}", camera.getId(), eventNo);
+        }
+
+        if (event.getEventLevel() != null && event.getEventLevel() >= 2) {
             autoCreateWorkOrder(event);
         }
 
@@ -189,6 +195,12 @@ public class AlertEventService {
         event.setHandleTime(LocalDateTime.now());
         event.setHandleRemark(remark);
         alertEventMapper.updateById(event);
+
+        if (event.getCameraId() != null && event.getEventLevel() != null && event.getEventLevel() >= 2) {
+            ptzCruiseService.resumeCruiseAfterEvent(event.getCameraId());
+            log.info("事件处理完成，恢复巡航: eventId={}, cameraId={}", id, event.getCameraId());
+        }
+
         return event;
     }
 
@@ -203,6 +215,12 @@ public class AlertEventService {
         event.setAlertStatus(2);
         alertEventMapper.updateById(event);
         log.info("标记误报: eventId={}, reason={}", id, request.getReason());
+
+        if (event.getCameraId() != null && event.getEventLevel() != null && event.getEventLevel() >= 2) {
+            ptzCruiseService.resumeCruiseAfterEvent(event.getCameraId());
+            log.info("误报标记完成，恢复巡航: eventId={}, cameraId={}", id, event.getCameraId());
+        }
+
         return event;
     }
 

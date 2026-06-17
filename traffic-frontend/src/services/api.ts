@@ -149,4 +149,34 @@ export const aiApi = {
     request.post<any, Result<any>>('/api/ai/event/callback', data),
 };
 
+export const ptzPresetApi = {
+  listByCamera: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/ptz/preset/camera/${cameraId}`),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/ptz/preset/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/ptz/preset', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/ptz/preset/${id}`),
+  nextIndex: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/ptz/preset/next-index/${cameraId}`),
+};
+
+export const ptzCruiseApi = {
+  listByCamera: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/ptz/cruise/camera/${cameraId}`),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/ptz/cruise/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/ptz/cruise', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/ptz/cruise/${id}`),
+  start: (id: number) =>
+    request.post<any, Result<any>>(`/api/ptz/cruise/${id}/start`),
+  stop: (id: number) =>
+    request.post<any, Result<any>>(`/api/ptz/cruise/${id}/stop`),
+  status: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/ptz/cruise/status/${cameraId}`),
+};
+
 export default request;

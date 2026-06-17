@@ -163,6 +163,58 @@ CREATE TABLE IF NOT EXISTS detection_task (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS ptz_preset (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    camera_id BIGINT NOT NULL,
+    preset_index INT NOT NULL,
+    preset_name VARCHAR(128) NOT NULL,
+    pan DECIMAL(10,4),
+    tilt DECIMAL(10,4),
+    zoom DECIMAL(10,4),
+    thumbnail_url VARCHAR(512),
+    sort_order INT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_preset_index (preset_index),
+    UNIQUE KEY uk_camera_preset (camera_id, preset_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ptz_cruise (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    camera_id BIGINT NOT NULL,
+    cruise_name VARCHAR(128) NOT NULL,
+    cruise_type INT DEFAULT 1,
+    status INT DEFAULT 0,
+    stay_seconds INT DEFAULT 10,
+    speed INT DEFAULT 5,
+    loop_count INT DEFAULT 0,
+    event_linkage INT DEFAULT 0,
+    event_return_seconds INT DEFAULT 30,
+    description VARCHAR(512),
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ptz_cruise_point (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    cruise_id BIGINT NOT NULL,
+    preset_id BIGINT NOT NULL,
+    preset_index INT,
+    preset_name VARCHAR(128),
+    stay_seconds INT,
+    sort_order INT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_cruise_id (cruise_id),
+    INDEX idx_sort_order (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT INTO sys_user (username, password, nickname, role, status, create_time) VALUES
 ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '系统管理员', 0, 1, NOW()),
 ('operator', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '值班员', 1, 1, NOW());
