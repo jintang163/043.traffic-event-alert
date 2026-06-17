@@ -37,7 +37,15 @@ class Settings(BaseSettings):
     EVENT_DEBRIS_STATIC_FRAMES: int = Field(default=20, env="EVENT_DEBRIS_STATIC_FRAMES")
 
     BACKEND_CALLBACK_URL: str = Field(default="http://localhost:8080/api/ai/event/callback", env="BACKEND_CALLBACK_URL")
+    BACKEND_VIDEO_UPLOAD_URL: str = Field(default="http://localhost:8080/api/ai/event/upload-video", env="BACKEND_VIDEO_UPLOAD_URL")
+    BACKEND_DETECTION_PUSH_URL: str = Field(default="http://localhost:8080/api/ai/detection/push", env="BACKEND_DETECTION_PUSH_URL")
     BACKEND_ENABLE_CALLBACK: bool = Field(default=True, env="BACKEND_ENABLE_CALLBACK")
+
+    VIDEO_PRE_RECORD_SECONDS: int = Field(default=10, env="VIDEO_PRE_RECORD_SECONDS")
+    VIDEO_POST_RECORD_SECONDS: int = Field(default=10, env="VIDEO_POST_RECORD_SECONDS")
+    VIDEO_TEMP_DIR: str = Field(default="./temp_videos", env="VIDEO_TEMP_DIR")
+    DETECTION_PUSH_ENABLED: bool = Field(default=True, env="DETECTION_PUSH_ENABLED")
+    DETECTION_PUSH_INTERVAL: float = Field(default=0.5, env="DETECTION_PUSH_INTERVAL")
 
     class Config:
         env_file = ".env"

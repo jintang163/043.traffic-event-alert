@@ -16,16 +16,42 @@ export interface WsAlertEvent {
   alertStatus: number;
 }
 
+export interface DetectionBBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface DetectionItem {
+  trackId: number;
+  classId: number;
+  className: string;
+  confidence: number;
+  bbox: DetectionBBox;
+  velocity?: number[];
+}
+
+export interface DetectionMessage {
+  cameraId: number;
+  timestamp: string;
+  frameWidth: number;
+  frameHeight: number;
+  detections: DetectionItem[];
+}
+
 export interface WebSocketMessage {
   type: string;
   data?: any;
   message?: string;
   timestamp?: number;
   onlineCount?: number;
+  cameraId?: number;
 }
 
 type MessageHandler = (message: WebSocketMessage) => void;
 type AlertHandler = (alert: WsAlertEvent) => void;
+type DetectionHandler = (cameraId: number, data: DetectionMessage) => void;
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080';
 
@@ -35,6 +61,8 @@ class WebSocketService {
   private userId: number | null = null;
   private messageHandlers: Set<MessageHandler> = new Set();
   private alertHandlers: Set<AlertHandler> = new Set();
+  private detectionHandlers: Map<number, Set<DetectionHandler>> = new Map();
+  private subscribedCameras: Set<number> = new Set();
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
@@ -67,6 +95,9 @@ class WebSocketService {
       this.connected = true;
       this.reconnectAttempts = 0;
       this.startHeartbeat();
+      if (this.subscribedCameras.size > 0) {
+        this.sendSubscribeMessage();
+      }
     };
 
     this.ws.onmessage = (event) => {
@@ -127,7 +158,7 @@ class WebSocketService {
   private handleMessage(body: string) {
     try {
       const message: WebSocketMessage = JSON.parse(body);
-      if (message.type !== 'PONG' && import.meta.env.DEV) {
+      if (message.type !== 'PONG' && message.type !== 'DETECTION' && import.meta.env.DEV) {
         console.log('[WS] Received message:', message.type);
       }
 
@@ -148,9 +179,70 @@ class WebSocketService {
           }
         });
       }
+
+      if (message.type === 'DETECTION' && message.cameraId !== undefined && message.data) {
+        const camId = message.cameraId;
+        const handlers = this.detectionHandlers.get(camId);
+        if (handlers) {
+          handlers.forEach((handler) => {
+            try {
+              handler(camId, message.data as DetectionMessage);
+            } catch (e) {
+              console.error('[WS] Detection handler error:', e);
+            }
+          });
+        }
+      }
     } catch (e) {
       console.error('[WS] Parse message error:', e, body);
     }
+  }
+
+  private sendSubscribeMessage() {
+    if (this.subscribedCameras.size === 0) {
+      this.send({ type: 'UNSUBSCRIBE_CAMERAS' });
+      return;
+    }
+    this.send({
+      type: 'SUBSCRIBE_CAMERAS',
+      cameraIds: Array.from(this.subscribedCameras),
+    });
+  }
+
+  subscribeCamera(cameraId: number) {
+    if (!this.subscribedCameras.has(cameraId)) {
+      this.subscribedCameras.add(cameraId);
+      if (this.connected) {
+        this.sendSubscribeMessage();
+      }
+    }
+  }
+
+  unsubscribeCamera(cameraId: number) {
+    if (this.subscribedCameras.has(cameraId)) {
+      this.subscribedCameras.delete(cameraId);
+      if (this.connected) {
+        this.sendSubscribeMessage();
+      }
+    }
+  }
+
+  onCameraDetection(cameraId: number, handler: DetectionHandler) {
+    if (!this.detectionHandlers.has(cameraId)) {
+      this.detectionHandlers.set(cameraId, new Set());
+    }
+    this.detectionHandlers.get(cameraId)!.add(handler);
+    this.subscribeCamera(cameraId);
+    return () => {
+      const handlers = this.detectionHandlers.get(cameraId);
+      if (handlers) {
+        handlers.delete(handler);
+        if (handlers.size === 0) {
+          this.detectionHandlers.delete(cameraId);
+          this.unsubscribeCamera(cameraId);
+        }
+      }
+    };
   }
 
   send(message: any) {

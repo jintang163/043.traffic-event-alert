@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Card, Spin, message } from 'antd';
-import { CameraOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { Card, Spin, Switch, message } from 'antd';
+import { CameraOutlined, ExclamationCircleOutlined, EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
+import { wsService, type DetectionItem } from '@/services/websocket';
 
 interface VideoPlayerProps {
   url: string;
+  cameraId?: number;
   cameraName?: string;
   autoPlay?: boolean;
   muted?: boolean;
@@ -12,9 +14,10 @@ interface VideoPlayerProps {
   height?: number;
   detections?: DetectionBox[];
   className?: string;
+  enableDetectionOverlay?: boolean;
 }
 
-interface DetectionBox {
+export interface DetectionBox {
   x1: number;
   y1: number;
   x2: number;
@@ -33,18 +36,25 @@ const CLASS_COLORS: Record<string, string> = {
   motorcycle: '#52c41a',
   bicycle: '#13c2c2',
   debris: '#eb2f96',
+  backpack: '#eb2f96',
+  handbag: '#eb2f96',
+  suitcase: '#eb2f96',
+  bottle: '#eb2f96',
+  cup: '#eb2f96',
   default: '#faad14',
 };
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
   url,
+  cameraId,
   cameraName,
   autoPlay = true,
   muted = true,
   showControls = true,
   height = 240,
-  detections = [],
+  detections: externalDetections,
   className = '',
+  enableDetectionOverlay = true,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -52,6 +62,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
+  const [liveDetections, setLiveDetections] = useState<DetectionItem[]>([]);
+  const [showDetections, setShowDetections] = useState(true);
+  const [subscribed, setSubscribed] = useState(false);
+
+  useEffect(() => {
+    if (!cameraId || !enableDetectionOverlay) return;
+    setSubscribed(true);
+    const unsub = wsService.onCameraDetection(cameraId, (_camId, data) => {
+      if (data && data.detections) {
+        setLiveDetections(data.detections);
+      }
+    });
+    return () => {
+      unsub();
+      setLiveDetections([]);
+      setSubscribed(false);
+    };
+  }, [cameraId, enableDetectionOverlay]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -127,8 +155,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return () => video.removeEventListener('resize', handleResize);
   }, []);
 
+  const allDetections: DetectionBox[] = [];
+
+  if (externalDetections && externalDetections.length > 0) {
+    allDetections.push(...externalDetections);
+  }
+
+  if (showDetections && liveDetections.length > 0) {
+    liveDetections.forEach((d) => {
+      allDetections.push({
+        x1: d.bbox.x1,
+        y1: d.bbox.y1,
+        x2: d.bbox.x2,
+        y2: d.bbox.y2,
+        className: d.className,
+        confidence: d.confidence,
+        trackId: d.trackId,
+      });
+    });
+  }
+
   const renderDetections = () => {
-    if (detections.length === 0 || !videoSize.width) return null;
+    if (allDetections.length === 0) return null;
 
     const container = containerRef.current;
     if (!container) return null;
@@ -136,25 +184,34 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight || height;
 
-    const scaleX = containerWidth / videoSize.width || 1;
-    const scaleY = containerHeight / videoSize.height || 1;
+    let scaleX = 1, scaleY = 1;
+    if (videoSize.width > 0 && videoSize.height > 0) {
+      scaleX = containerWidth / videoSize.width;
+      scaleY = containerHeight / videoSize.height;
+    } else {
+      scaleX = containerWidth / 1280;
+      scaleY = containerHeight / 720;
+    }
 
-    return detections.map((det, idx) => {
-      const color = det.color || CLASS_COLORS[det.className.toLowerCase()] || CLASS_COLORS.default;
+    return allDetections.map((det, idx) => {
+      const lowerName = det.className.toLowerCase();
+      const color = det.color || CLASS_COLORS[lowerName] || CLASS_COLORS.default;
       const x = det.x1 * scaleX;
       const y = det.y1 * scaleY;
       const width = (det.x2 - det.x1) * scaleX;
       const h = (det.y2 - det.y1) * scaleY;
+
+      if (width < 3 || h < 3) return null;
 
       return (
         <div
           key={idx}
           style={{
             position: 'absolute',
-            left: `${x}px`,
-            top: `${y}px`,
-            width: `${width}px`,
-            height: `${h}px`,
+            left: `${Math.max(0, x)}px`,
+            top: `${Math.max(0, y)}px`,
+            width: `${Math.max(3, width)}px`,
+            height: `${Math.max(3, h)}px`,
             border: `2px solid ${color}`,
             borderRadius: 4,
             boxShadow: `0 0 0 1px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(0,0,0,0.1)`,
@@ -182,19 +239,36 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     });
   };
 
+  const titleContent = cameraName ? (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <CameraOutlined />
+        {cameraName}
+      </span>
+      {cameraId && enableDetectionOverlay && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#666' }}>
+          <Switch
+            size="small"
+            checked={showDetections}
+            onChange={setShowDetections}
+            checkedChildren={<EyeOutlined />}
+            unCheckedChildren={<EyeInvisibleOutlined />}
+          />
+          <span>检测框</span>
+          {subscribed && liveDetections.length > 0 && (
+            <span style={{ color: '#52c41a' }}>({liveDetections.length}个目标)</span>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
     <Card
       className={className}
       bodyStyle={{ padding: 0, position: 'relative', overflow: 'hidden' }}
       style={{ borderRadius: 8 }}
-      title={
-        cameraName ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CameraOutlined />
-            {cameraName}
-          </span>
-        ) : null
-      }
+      title={titleContent}
     >
       <div
         ref={containerRef}

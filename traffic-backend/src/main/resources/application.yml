@@ -27,8 +27,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 100MB
-      max-request-size: 100MB
+      max-file-size: 500MB
+      max-request-size: 500MB
 
 minio:
   endpoint: http://localhost:9000
@@ -91,3 +91,25 @@ logging:
   level:
     com.traffic.alert: debug
     org.springframework.security: info
+
+device:
+  sdk:
+    hikvisionEnabled: false
+    dahuaEnabled: false
+    gb28181Enabled: false
+    sdkProxyUrl: http://localhost:9000
+    hikvisionSdkPath:
+    dahuaSdkPath:
+    hikvisionUsername: admin
+    hikvisionPassword: Admin12345
+    hikvisionPort: 8000
+    dahuaUsername: admin
+    dahuaPassword: admin123
+    dahuaPort: 37777
+    gb28181SipServer: 127.0.0.1
+    gb28181SipPort: "5060"
+    gb28181SipId: "34020000002000000001"
+    gb28181SipDomain: "3402000000"
+    gb28181SipPassword: "12345678"
+    gb28181MediaServer: 127.0.0.1
+    gb28181MediaPort: "10000"

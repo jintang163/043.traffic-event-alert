@@ -86,7 +86,9 @@ public class AlertEventService {
             throw new BusinessException("摄像头不存在");
         }
 
-        String eventNo = "EVT" + LocalDateTime.now().format(EVENT_NO_FORMATTER) +
+        String eventNo = request.getEventNo() != null && !request.getEventNo().isEmpty()
+                ? request.getEventNo()
+                : "EVT" + LocalDateTime.now().format(EVENT_NO_FORMATTER) +
                 String.format("%04d", (int) (Math.random() * 10000));
 
         AlertEvent event = new AlertEvent();
@@ -104,6 +106,10 @@ public class AlertEventService {
         event.setDescription(request.getDescription());
         event.setAlertStatus(0);
         event.setIsFalsePositive(0);
+
+        if (request.getEventVideo() != null && !request.getEventVideo().isEmpty()) {
+            event.setEventVideo(request.getEventVideo());
+        }
 
         if (request.getSnapshotBase64() != null && !request.getSnapshotBase64().isEmpty()) {
             try {
@@ -250,5 +256,41 @@ public class AlertEventService {
         event.setEventSnapshot(url);
         alertEventMapper.updateById(event);
         return url;
+    }
+
+    @Transactional
+    public String uploadEventVideo(Long cameraId, String eventNo, MultipartFile videoFile) {
+        if (videoFile == null || videoFile.isEmpty()) {
+            throw new BusinessException("视频文件为空");
+        }
+
+        String fileName = videoFile.getOriginalFilename();
+        String extension = fileName != null && fileName.contains(".")
+                ? fileName.substring(fileName.lastIndexOf("."))
+                : ".mp4";
+
+        String finalEventNo = (eventNo != null && !eventNo.isEmpty())
+                ? eventNo
+                : "EVT" + LocalDateTime.now().format(EVENT_NO_FORMATTER) + String.format("%04d", (int) (Math.random() * 10000));
+
+        String objectName = "event-videos/" + finalEventNo + extension;
+        String contentType = videoFile.getContentType() != null ? videoFile.getContentType() : "video/mp4";
+
+        String videoUrl = minioService.uploadFile(objectName, videoFile.getInputStream(),
+                videoFile.getSize(), contentType);
+
+        log.info("事件视频已上传: eventNo={}, url={}, size={}KB",
+                finalEventNo, videoUrl, videoFile.getSize() / 1024);
+
+        LambdaQueryWrapper<AlertEvent> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AlertEvent::getEventNo, finalEventNo).last("LIMIT 1");
+        AlertEvent existEvent = alertEventMapper.selectOne(wrapper);
+        if (existEvent != null) {
+            existEvent.setEventVideo(videoUrl);
+            alertEventMapper.updateById(existEvent);
+            log.info("已更新告警事件视频URL: eventId={}", existEvent.getId());
+        }
+
+        return videoUrl;
     }
 }

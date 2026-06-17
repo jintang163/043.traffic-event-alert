@@ -10,6 +10,7 @@ import java.util.Map;
 @Data
 public class AiEventCallbackRequest {
 
+    private String eventNo;
     private Long cameraId;
     private String eventType;
     private Integer eventLevel;
@@ -17,6 +18,7 @@ public class AiEventCallbackRequest {
     private LocalDateTime eventTime;
     private String description;
     private String snapshotBase64;
+    private String eventVideo;
     private List<Map<String, Object>> trackData;
     private Map<String, Object> bbox;
 }

@@ -164,6 +164,7 @@ const Dashboard: React.FC = () => {
                     }} style={{ cursor: 'pointer' }}>
                       <VideoPlayer
                         url={camera.streamUrl}
+                        cameraId={camera.id}
                         cameraName={`${camera.cameraName}${camera.onlineStatus === 0 ? ' (离线)' : ''}`}
                         height={200}
                         showControls={false}
@@ -248,6 +249,8 @@ const Dashboard: React.FC = () => {
         {selectedCamera && (
           <VideoPlayer
             url={selectedCamera.streamUrl}
+            cameraId={selectedCamera.id}
+            cameraName={selectedCamera.cameraName}
             height={500}
             showControls
           />

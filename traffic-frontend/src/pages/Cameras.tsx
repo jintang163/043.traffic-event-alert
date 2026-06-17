@@ -453,6 +453,8 @@ const Cameras: React.FC = () => {
           <div>
             <VideoPlayer
               url={viewCamera.streamUrl}
+              cameraId={viewCamera.id}
+              cameraName={viewCamera.cameraName}
               height={450}
               showControls
             />

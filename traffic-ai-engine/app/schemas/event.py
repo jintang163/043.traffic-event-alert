@@ -83,6 +83,7 @@ class StreamDetectionRequest(BaseModel):
 
 
 class AiEventCallbackRequest(BaseModel):
+    eventNo: Optional[str] = None
     cameraId: int
     eventType: str
     eventLevel: int = 1
@@ -90,5 +91,6 @@ class AiEventCallbackRequest(BaseModel):
     eventTime: Optional[datetime] = None
     description: str
     snapshotBase64: Optional[str] = None
+    eventVideo: Optional[str] = None
     trackData: Optional[List[Dict[str, Any]]] = None
     bbox: Optional[Dict[str, Any]] = None
