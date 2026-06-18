@@ -415,3 +415,84 @@ INSERT INTO global_track (track_no, target_class, license_plate, plate_confidenc
     116.407400, 39.914200, 116.408400, 39.914200,
     '2025-06-18 10:25:00', '2025-06-18 10:26:15', 2, 96,
     220.00, 66.80, 2, 0, 0, '追踪中', NOW());
+
+CREATE TABLE IF NOT EXISTS rule_set (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    rule_code VARCHAR(64) NOT NULL UNIQUE COMMENT '规则编码',
+    rule_name VARCHAR(128) NOT NULL COMMENT '规则名称',
+    gateway_type INT DEFAULT 1 COMMENT '网关类型：1-排他 2-并行 3-包容',
+    description VARCHAR(512) COMMENT '描述',
+    status INT DEFAULT 1 COMMENT '状态：0-禁用 1-启用',
+    default_branch VARCHAR(64) COMMENT '默认分支编码',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_rule_code (rule_code),
+    INDEX idx_gateway_type (gateway_type),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='规则集表';
+
+CREATE TABLE IF NOT EXISTS rule_branch (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    rule_set_id BIGINT NOT NULL COMMENT '规则集ID',
+    branch_code VARCHAR(64) NOT NULL COMMENT '分支编码',
+    branch_name VARCHAR(128) NOT NULL COMMENT '分支名称',
+    expression TEXT COMMENT '表达式',
+    action_type VARCHAR(32) COMMENT '动作类型',
+    action_target VARCHAR(128) COMMENT '动作目标',
+    action_params TEXT COMMENT '动作参数JSON',
+    priority DECIMAL(8,2) DEFAULT 0 COMMENT '优先级',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_rule_set_id (rule_set_id),
+    INDEX idx_branch_code (branch_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='规则分支表';
+
+CREATE TABLE IF NOT EXISTS decision_table (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    table_code VARCHAR(64) NOT NULL UNIQUE COMMENT '决策表编码',
+    table_name VARCHAR(128) NOT NULL COMMENT '决策表名称',
+    table_data MEDIUMTEXT COMMENT '决策表JSON数据',
+    hit_policy VARCHAR(16) DEFAULT 'FIRST' COMMENT '命中策略：FIRST/RULE_ORDER',
+    description VARCHAR(512) COMMENT '描述',
+    status INT DEFAULT 1 COMMENT '状态：0-禁用 1-启用',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_table_code (table_code),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='决策表';
+
+CREATE TABLE IF NOT EXISTS rule_execution_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    execution_id VARCHAR(64) NOT NULL UNIQUE COMMENT '执行ID',
+    rule_set_id BIGINT COMMENT '规则集ID',
+    rule_code VARCHAR(64) COMMENT '规则编码',
+    rule_name VARCHAR(128) COMMENT '规则名称',
+    gateway_type INT COMMENT '网关类型',
+    matched_branches VARCHAR(512) COMMENT '命中分支编码，逗号分隔',
+    input_context MEDIUMTEXT COMMENT '输入上下文JSON',
+    execution_result MEDIUMTEXT COMMENT '执行结果JSON',
+    execution_time BIGINT COMMENT '执行耗时ms',
+    error_message TEXT COMMENT '错误信息',
+    success INT DEFAULT 1 COMMENT '是否成功：0-失败 1-成功',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_execution_id (execution_id),
+    INDEX idx_rule_set_id (rule_set_id),
+    INDEX idx_rule_code (rule_code),
+    INDEX idx_create_time (create_time),
+    INDEX idx_success (success)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='规则执行日志';
+
+INSERT INTO rule_set (rule_code, rule_name, gateway_type, description, status, default_branch, create_time) VALUES
+('APPROVAL_FLOW_001', '审批金额路由规则', 1, '根据金额和发起人部门决定审批路径', 1, 'BRANCH_NORMAL', NOW());
+
+INSERT INTO rule_branch (rule_set_id, branch_code, branch_name, expression, action_type, action_target, action_params, priority, sort_order, create_time) VALUES
+(1, 'BRANCH_DIRECTOR', '总监审批', "form.amount > 100000 && system.deptName == '销售部'", 'APPROVAL', 'director', NULL, 100, 1, NOW()),
+(1, 'BRANCH_MANAGER', '经理审批', "form.amount > 50000 && form.amount <= 100000", 'APPROVAL', 'manager', NULL, 50, 2, NOW()),
+(1, 'BRANCH_NORMAL', '普通审批', "form.amount <= 50000", 'APPROVAL', 'team_lead', NULL, 0, 3, NOW());
+

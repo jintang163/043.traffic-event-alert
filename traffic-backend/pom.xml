@@ -25,6 +25,7 @@
         <springdoc.version>2.5.0</springdoc.version>
         <commons-io.version>2.16.1</commons-io.version>
         <fastjson2.version>2.0.49</fastjson2.version>
+        <aviator.version>5.4.1</aviator.version>
     </properties>
 
     <dependencies>
@@ -108,6 +109,12 @@
             <groupId>com.alibaba.fastjson2</groupId>
             <artifactId>fastjson2</artifactId>
             <version>${fastjson2.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.googlecode.aviator</groupId>
+            <artifactId>aviator</artifactId>
+            <version>${aviator.version}</version>
         </dependency>
 
         <dependency>
