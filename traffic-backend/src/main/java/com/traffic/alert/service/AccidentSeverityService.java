@@ -5,6 +5,7 @@ import com.traffic.alert.entity.AlertEvent;
 import com.traffic.alert.enums.AccidentSeverity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -35,23 +36,208 @@ public class AccidentSeverityService {
         if (request != null && request.getAccidentSeverity() != null
                 && !request.getAccidentSeverity().isEmpty()) {
             AccidentSeverity override = AccidentSeverity.of(request.getAccidentSeverity());
-            applySeverity(event, override);
+            List<String> reasons = new ArrayList<>();
+            reasons.add("AI直接指定等级:" + override.getLabel());
+            applySeverity(event, override, reasons);
             log.info("事故等级由AI直接指定: eventNo={}, severity={}({})",
                     event.getEventNo(), override.getCode(), override.getLabel());
             return override;
         }
 
+        boolean hasExplicitFeatures = hasAnyFeature(event);
+
+        if (!hasExplicitFeatures && request != null) {
+            inferFeaturesFromCallback(event, request);
+        }
+
         int totalScore = calculateScore(event);
         AccidentSeverity severity = resolveSeverity(totalScore);
 
-        applySeverity(event, severity);
+        if (!hasExplicitFeatures && !hasInferredFeatures(event) && totalScore == 0) {
+            severity = AccidentSeverity.GENERAL;
+        }
 
-        List<String> reasons = buildReasons(event, totalScore, severity);
+        List<String> reasons = buildReasons(event, totalScore, severity, hasExplicitFeatures || hasInferredFeatures(event));
+
+        applySeverity(event, severity, reasons);
 
         log.info("事故严重程度评估完成: eventNo={}, score={}, severity={}({}), reasons={}",
                 event.getEventNo(), totalScore, severity.getCode(), severity.getLabel(), reasons);
 
         return severity;
+    }
+
+    private boolean hasAnyFeature(AlertEvent event) {
+        return (event.getAccidentFire() != null && event.getAccidentFire() == 1)
+                || (event.getAccidentRollover() != null && event.getAccidentRollover() == 1)
+                || (event.getAccidentCasualty() != null && event.getAccidentCasualty() > 0)
+                || (event.getAccidentDeformationLevel() != null && event.getAccidentDeformationLevel() > 0)
+                || (event.getAccidentVehicles() != null && event.getAccidentVehicles() > 1)
+                || (event.getAccidentImpactSpeed() != null && event.getAccidentImpactSpeed().compareTo(BigDecimal.ZERO) > 0);
+    }
+
+    private boolean hasInferredFeatures(AlertEvent event) {
+        return (event.getAccidentVehicles() != null && event.getAccidentVehicles() > 1)
+                || (event.getAccidentDeformationLevel() != null && event.getAccidentDeformationLevel() > 0)
+                || (event.getAccidentImpactSpeed() != null && event.getAccidentImpactSpeed().compareTo(BigDecimal.ZERO) > 0);
+    }
+
+    private void inferFeaturesFromCallback(AlertEvent event, AiEventCallbackRequest request) {
+        List<Map<String, Object>> trackData = request.getTrackData();
+        Map<String, Object> bbox = request.getBbox();
+
+        if (trackData != null && !trackData.isEmpty()) {
+            Map<String, List<Map<String, Object>>> groupedByClass = new HashMap<>();
+            for (Map<String, Object> track : trackData) {
+                String className = track.get("className") != null ? track.get("className").toString() : "unknown";
+                groupedByClass.computeIfAbsent(className, k -> new ArrayList<>()).add(track);
+            }
+
+            int vehicleCount = 0;
+            for (Map.Entry<String, List<Map<String, Object>>> entry : groupedByClass.entrySet()) {
+                String cls = entry.getKey().toLowerCase();
+                if (cls.contains("car") || cls.contains("truck") || cls.contains("bus")
+                        || cls.contains("vehicle") || cls.contains("van") || cls.contains("motorcycle")) {
+                    vehicleCount += entry.getValue().size();
+                }
+            }
+
+            if (vehicleCount > event.getAccidentVehicles()) {
+                event.setAccidentVehicles(vehicleCount);
+                log.debug("兜底推断: 涉事车辆数={}", vehicleCount);
+            }
+
+            if (vehicleCount >= 3) {
+                boolean hasLargeOverlap = checkBboxOverlap(trackData);
+                if (hasLargeOverlap) {
+                    event.setAccidentDeformationLevel(DEFORMATION_SCORE_MODERATE);
+                    log.debug("兜底推断: 多车碰撞Bbox重叠→中度变形");
+                }
+            }
+
+            boolean hasHighSpeed = checkTrackSpeeds(trackData);
+            if (hasHighSpeed) {
+                event.setAccidentImpactSpeed(BigDecimal.valueOf(60));
+                log.debug("兜底推断: 检测到高速运动→碰撞车速≥60km/h");
+            }
+        }
+
+        if (bbox != null) {
+            Object classNameObj = bbox.get("className");
+            if (classNameObj != null) {
+                String cls = classNameObj.toString().toLowerCase();
+                if (cls.contains("fire") || cls.contains("flame") || cls.contains("smoke")) {
+                    event.setAccidentFire(1);
+                    log.debug("兜底推断: 检测框类型含火灾/烟雾→起火");
+                }
+                if (cls.contains("rollover") || cls.contains("overturned") || cls.contains("flipped")) {
+                    event.setAccidentRollover(1);
+                    log.debug("兜底推断: 检测框类型含翻滚→翻车");
+                }
+            }
+
+            Object confidenceObj = bbox.get("accidentDeformationLevel");
+            if (confidenceObj instanceof Number) {
+                int lv = ((Number) confidenceObj).intValue();
+                if (lv >= DEFORMATION_SCORE_MINOR && lv <= DEFORMATION_SCORE_TOTAL) {
+                    event.setAccidentDeformationLevel(lv);
+                }
+            }
+            Object fireObj = bbox.get("accidentFire");
+            if (fireObj instanceof Number && ((Number) fireObj).intValue() == 1) {
+                event.setAccidentFire(1);
+            }
+            Object rolloverObj = bbox.get("accidentRollover");
+            if (rolloverObj instanceof Number && ((Number) rolloverObj).intValue() == 1) {
+                event.setAccidentRollover(1);
+            }
+            Object speedObj = bbox.get("accidentImpactSpeed");
+            if (speedObj instanceof Number) {
+                event.setAccidentImpactSpeed(BigDecimal.valueOf(((Number) speedObj).doubleValue()));
+            }
+            Object casualtyObj = bbox.get("accidentCasualty");
+            if (casualtyObj instanceof Number) {
+                event.setAccidentCasualty(((Number) casualtyObj).intValue());
+            }
+        }
+
+        if (request.getDescription() != null) {
+            String desc = request.getDescription().toLowerCase();
+            if (desc.contains("起火") || desc.contains("着火") || desc.contains("燃烧") || desc.contains("fire")) {
+                event.setAccidentFire(1);
+                log.debug("兜底推断: 描述含起火关键词→起火");
+            }
+            if (desc.contains("翻车") || desc.contains("翻滚") || desc.contains("侧翻") || desc.contains("rollover")) {
+                event.setAccidentRollover(1);
+                log.debug("兜底推断: 描述含翻车关键词→翻车");
+            }
+            if (desc.contains("伤亡") || desc.contains("受伤") || desc.contains("死亡") || desc.contains("casualty")) {
+                if (event.getAccidentCasualty() == null || event.getAccidentCasualty() == 0) {
+                    event.setAccidentCasualty(1);
+                    log.debug("兜底推断: 描述含伤亡关键词→伤亡1人");
+                }
+            }
+            if (desc.contains("追尾") || desc.contains("碰撞") || desc.contains("连环")) {
+                if (event.getAccidentVehicles() == null || event.getAccidentVehicles() < 2) {
+                    event.setAccidentVehicles(2);
+                    log.debug("兜底推断: 描述含追尾/碰撞关键词→2辆车");
+                }
+            }
+        }
+    }
+
+    private boolean checkBboxOverlap(List<Map<String, Object>> trackData) {
+        List<double[]> boxes = new ArrayList<>();
+        for (Map<String, Object> track : trackData) {
+            Object bboxObj = track.get("bbox");
+            if (bboxObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> b = (Map<String, Object>) bboxObj;
+                double x1 = toDouble(b.get("x1")), y1 = toDouble(b.get("y1"));
+                double x2 = toDouble(b.get("x2")), y2 = toDouble(b.get("y2"));
+                if (x2 > x1 && y2 > y1) boxes.add(new double[]{x1, y1, x2, y2});
+            }
+        }
+        if (boxes.size() < 2) return false;
+        int overlapCount = 0;
+        for (int i = 0; i < boxes.size(); i++) {
+            for (int j = i + 1; j < boxes.size(); j++) {
+                double overlap = computeIoU(boxes.get(i), boxes.get(j));
+                if (overlap > 0.1) overlapCount++;
+            }
+        }
+        return overlapCount >= 1;
+    }
+
+    private boolean checkTrackSpeeds(List<Map<String, Object>> trackData) {
+        for (Map<String, Object> track : trackData) {
+            Object velObj = track.get("velocity");
+            if (velObj instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Number> vel = (List<Number>) velObj;
+                if (vel.size() >= 2) {
+                    double speed = Math.sqrt(vel.get(0).doubleValue() * vel.get(0).doubleValue()
+                            + vel.get(1).doubleValue() * vel.get(1).doubleValue());
+                    if (speed > 15) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private double computeIoU(double[] a, double[] b) {
+        double x1 = Math.max(a[0], b[0]), y1 = Math.max(a[1], b[1]);
+        double x2 = Math.min(a[2], b[2]), y2 = Math.min(a[3], b[3]);
+        double inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+        double areaA = (a[2] - a[0]) * (a[3] - a[1]);
+        double areaB = (b[2] - b[0]) * (b[3] - b[1]);
+        double union = areaA + areaB - inter;
+        return union > 0 ? inter / union : 0;
+    }
+
+    private double toDouble(Object val) {
+        if (val instanceof Number) return ((Number) val).doubleValue();
+        return 0;
     }
 
     private void setAccidentFeatures(AlertEvent event, AiEventCallbackRequest request) {
@@ -124,10 +310,14 @@ public class AccidentSeverityService {
         return AccidentSeverity.SLIGHT;
     }
 
-    private void applySeverity(AlertEvent event, AccidentSeverity severity) {
+    private void applySeverity(AlertEvent event, AccidentSeverity severity, List<String> reasons) {
         event.setAccidentSeverity(severity.getCode());
         event.setAccidentSeverityLabel(severity.getLabel());
         event.setAccidentPriority(severity.getPriority());
+
+        if (reasons != null && !reasons.isEmpty()) {
+            event.setAccidentEvaluationReasons(String.join("; ", reasons));
+        }
 
         int mappedLevel = mapToEventLevel(severity);
         if (event.getEventLevel() == null || event.getEventLevel() < mappedLevel) {
@@ -143,7 +333,7 @@ public class AccidentSeverityService {
         }
     }
 
-    private List<String> buildReasons(AlertEvent event, int score, AccidentSeverity severity) {
+    private List<String> buildReasons(AlertEvent event, int score, AccidentSeverity severity, boolean hasFeatures) {
         List<String> reasons = new ArrayList<>();
 
         if (event.getAccidentFire() != null && event.getAccidentFire() == 1) {
@@ -176,8 +366,10 @@ public class AccidentSeverityService {
             else if (speed >= 40) reasons.add("碰撞车速≥40km/h(+1)");
         }
 
-        if (reasons.isEmpty()) {
-            reasons.add("特征信息不足，按轻微事故处理");
+        if (!hasFeatures && score == 0) {
+            reasons.add("无明确特征，按一般事故兜底处理(默认GENERAL)");
+        } else if (reasons.isEmpty()) {
+            reasons.add("特征信息不足");
         }
         reasons.add("综合得分:" + score);
 

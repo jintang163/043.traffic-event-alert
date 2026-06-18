@@ -516,6 +516,7 @@ ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_impact_speed DECIMAL(8
 ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_severity VARCHAR(16) DEFAULT NULL COMMENT '事故严重程度:SLIGHT/GENERAL/MAJOR' AFTER accident_impact_speed;
 ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_severity_label VARCHAR(32) DEFAULT NULL COMMENT '事故严重程度标签' AFTER accident_severity;
 ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_priority INT DEFAULT NULL COMMENT '事故响应优先级' AFTER accident_severity_label;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_evaluation_reasons TEXT DEFAULT NULL COMMENT '事故评估理由' AFTER accident_priority;
 ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_accident_severity (accident_severity);
 
 CREATE TABLE IF NOT EXISTS traffic_statistics (

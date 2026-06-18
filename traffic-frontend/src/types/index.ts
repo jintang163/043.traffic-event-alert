@@ -95,6 +95,7 @@ export interface AlertEvent {
   accidentSeverity?: 'SLIGHT' | 'GENERAL' | 'MAJOR' | string;
   accidentSeverityLabel?: string;
   accidentPriority?: number;
+  accidentEvaluationReasons?: string;
 }
 
 export const ACCIDENT_SEVERITY_OPTIONS = [

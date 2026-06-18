@@ -81,6 +81,8 @@ const Alerts: React.FC = () => {
   const [orderForm] = Form.useForm();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [debrisCategories, setDebrisCategories] = useState<DebrisCategoryOption[]>([]);
+  const [majorAlertModal, setMajorAlertModal] = useState(false);
+  const [majorAlertInfo, setMajorAlertInfo] = useState<AlertEvent | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -114,7 +116,26 @@ const Alerts: React.FC = () => {
       loadData();
     });
 
-    return () => unsub();
+    const unsubMajor = wsService.onMajorAlert((alert) => {
+      addAlert(alert as any);
+      setMajorAlertInfo(alert as any);
+      setMajorAlertModal(true);
+      loadData();
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        osc.type = 'square';
+        gain.gain.value = 0.3;
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 600);
+      } catch (_) {}
+    });
+
+    return () => { unsub(); unsubMajor(); };
   }, [current, pageSize]);
 
   useEffect(() => {
@@ -481,6 +502,13 @@ const Alerts: React.FC = () => {
               ))}
             </Select>
           </Form.Item>
+          <Form.Item name="accidentSeverity" label="事故等级">
+            <Select placeholder="全部" style={{ width: 120 }} allowClear>
+              {ACCIDENT_SEVERITY_OPTIONS.map((opt) => (
+                <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Form.Item name="eventLevel" label="等级">
             <Select placeholder="全部" style={{ width: 100 }} allowClear>
               {Object.entries(EVENT_LEVEL_LABELS).map(([k, v]) => (
@@ -644,6 +672,13 @@ const Alerts: React.FC = () => {
                       ? `${currentAlert.accidentImpactSpeed.toFixed(1)} km/h`
                       : '-'}
                   </Descriptions.Item>
+                  {currentAlert.accidentEvaluationReasons && (
+                    <Descriptions.Item label="评估理由" span={3}>
+                      <div style={{ whiteSpace: 'pre-wrap', color: '#595959', fontSize: 13 }}>
+                        {currentAlert.accidentEvaluationReasons}
+                      </div>
+                    </Descriptions.Item>
+                  )}
                 </>
               )}
               {currentAlert.isFalsePositive === 1 && (
@@ -845,6 +880,43 @@ const Alerts: React.FC = () => {
             <TextArea rows={3} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        open={majorAlertModal}
+        onCancel={() => setMajorAlertModal(false)}
+        footer={[
+          <Button key="close" onClick={() => setMajorAlertModal(false)}>关闭</Button>,
+          <Button key="view" type="primary" danger onClick={() => {
+            setMajorAlertModal(false);
+            if (majorAlertInfo) handleView(majorAlertInfo);
+          }}>查看详情</Button>,
+        ]}
+        width={520}
+        closable={false}
+        styles={{ body: { padding: 24 } }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🚨</div>
+          <h2 style={{ color: '#ff4d4f', marginBottom: 8 }}>重大事故紧急告警</h2>
+          {majorAlertInfo && (
+            <div style={{ textAlign: 'left', background: '#fff1f0', padding: 16, borderRadius: 8, marginTop: 16 }}>
+              <p><strong>事件编号:</strong> {majorAlertInfo.eventNo}</p>
+              <p><strong>摄像头:</strong> {majorAlertInfo.cameraName}</p>
+              <p><strong>位置:</strong> {majorAlertInfo.location || '-'}</p>
+              <p><strong>时间:</strong> {majorAlertInfo.eventTime}</p>
+              <p><strong>事故等级:</strong> <Tag color="#ff4d4f" style={{ fontWeight: 700 }}>{majorAlertInfo.accidentSeverityLabel || '重大事故'}</Tag></p>
+              {majorAlertInfo.accidentVehicles != null && <p><strong>涉事车辆:</strong> {majorAlertInfo.accidentVehicles} 辆</p>}
+              {(majorAlertInfo.accidentFire === 1 || majorAlertInfo.accidentRollover === 1) && (
+                <p><strong>特征:</strong>
+                  {majorAlertInfo.accidentFire === 1 && <Tag color="red">起火</Tag>}
+                  {majorAlertInfo.accidentRollover === 1 && <Tag color="red">翻车</Tag>}
+                </p>
+              )}
+              {majorAlertInfo.description && <p><strong>描述:</strong> {majorAlertInfo.description}</p>}
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

@@ -78,4 +78,15 @@ public class PtzPresetService {
         int maxIndex = presets.stream().mapToInt(PtzPreset::getPresetIndex).max().orElse(0);
         return maxIndex + 1;
     }
+
+    public PtzPreset findNearestPreset(Long cameraId, String keyword) {
+        if (keyword == null || keyword.isEmpty()) return null;
+        List<PtzPreset> presets = listByCamera(cameraId);
+        for (PtzPreset p : presets) {
+            if (p.getPresetName() != null && p.getPresetName().contains(keyword)) {
+                return p;
+            }
+        }
+        return null;
+    }
 }

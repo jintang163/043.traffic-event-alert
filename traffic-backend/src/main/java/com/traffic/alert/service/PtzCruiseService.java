@@ -3,6 +3,7 @@ package com.traffic.alert.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.traffic.alert.common.BusinessException;
 import com.traffic.alert.dto.PtzCruiseRequest;
+import com.traffic.alert.entity.AlertEvent;
 import com.traffic.alert.entity.PtzCruise;
 import com.traffic.alert.entity.PtzCruisePoint;
 import com.traffic.alert.entity.PtzPreset;
@@ -27,6 +28,7 @@ public class PtzCruiseService {
     private final PtzCruisePointMapper ptzCruisePointMapper;
     private final PtzPresetService ptzPresetService;
     private final PtzCruiseScheduler ptzCruiseScheduler;
+    private final CameraService cameraService;
 
     public List<PtzCruise> listByCamera(Long cameraId) {
         return ptzCruiseMapper.selectList(new LambdaQueryWrapper<PtzCruise>()
@@ -162,10 +164,36 @@ public class PtzCruiseService {
         ptzCruiseScheduler.resumeAfterEvent(cameraId);
     }
 
-    public void triggerMajorAccidentResponse(Long cameraId, com.traffic.alert.entity.AlertEvent event) {
+    public void triggerMajorAccidentResponse(Long cameraId, AlertEvent event) {
         pauseCruiseForEvent(cameraId);
-        log.info("重大事故PTZ响应已触发: cameraId={}, eventNo={}, severity={}",
-                cameraId, event != null ? event.getEventNo() : null,
-                event != null ? event.getAccidentSeverity() : null);
+
+        boolean ptzMoved = false;
+
+        PtzPreset preset = ptzPresetService.findNearestPreset(cameraId, "事故");
+        if (preset != null) {
+            ptzMoved = cameraService.gotoPreset(cameraId, preset.getPresetIndex());
+            if (ptzMoved) {
+                log.info("重大事故PTZ联动: cameraId={}, 转到事故预置位[{}]{}", cameraId, preset.getPresetIndex(), preset.getPresetName());
+            }
+        }
+
+        if (!ptzMoved) {
+            List<PtzPreset> allPresets = ptzPresetService.listByCamera(cameraId);
+            if (!allPresets.isEmpty()) {
+                PtzPreset first = allPresets.get(0);
+                ptzMoved = cameraService.gotoPreset(cameraId, first.getPresetIndex());
+                if (ptzMoved) {
+                    log.info("重大事故PTZ联动: cameraId={}, 转到首个预置位[{}]{}", cameraId, first.getPresetIndex(), first.getPresetName());
+                }
+            }
+        }
+
+        if (ptzMoved) {
+            log.info("重大事故PTZ联动完成: cameraId={}, eventNo={}, severity={}",
+                    cameraId, event != null ? event.getEventNo() : null,
+                    event != null ? event.getAccidentSeverity() : null);
+        } else {
+            log.warn("重大事故PTZ联动失败(无可用预置位或云台不可控): cameraId={}", cameraId);
+        }
     }
 }

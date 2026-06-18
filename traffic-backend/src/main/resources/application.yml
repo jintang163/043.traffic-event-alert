@@ -86,6 +86,7 @@ notification:
     apiUrl: https://sms.example.com/api/send
     apiKey: YOUR_API_KEY
     templateId: YOUR_TEMPLATE_ID
+    emergencyTemplateId: YOUR_EMERGENCY_TEMPLATE_ID
 
 logging:
   level:
