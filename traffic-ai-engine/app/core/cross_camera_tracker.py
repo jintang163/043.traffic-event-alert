@@ -85,6 +85,14 @@ class GlobalCrossCameraTracker:
         with self._lock:
             return list(self._camera_neighbors.get(camera_id, []))
 
+    def get_track_record(self, camera_id: str, local_track_id: int) -> Optional[CameraTrackRecord]:
+        with self._lock:
+            cam_tracks = self._camera_tracks.get(camera_id, {})
+            global_id = cam_tracks.get(local_track_id)
+            if not global_id:
+                return None
+            return self._active_tracks.get(global_id)
+
     def register_track(self,
                        camera_id: str,
                        local_track_id: int,

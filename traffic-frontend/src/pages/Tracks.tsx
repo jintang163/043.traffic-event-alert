@@ -10,6 +10,7 @@ import {
   EnvironmentOutlined, ClockCircleOutlined, WarningOutlined,
   ArrowRightOutlined,
 } from '@ant-design/icons';
+import { useSearchParams } from 'react-router-dom';
 import { globalTrackApi, cameraApi } from '@/services/api';
 import {
   TRACK_STATUS_LABELS,
@@ -33,6 +34,7 @@ interface TrackSegment {
 }
 
 const Tracks: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState<GlobalTrack[]>([]);
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState(1);
@@ -96,6 +98,25 @@ const Tracks: React.FC = () => {
       setLoadingDetail(false);
     }
   };
+
+  useEffect(() => {
+    const trackId = searchParams.get('id');
+    if (trackId && !detailDrawer) {
+      const id = parseInt(trackId, 10);
+      if (!isNaN(id)) {
+        const existing = data.find((t) => t.id === id);
+        if (existing) {
+          handleViewDetail(existing);
+        } else {
+          globalTrackApi.get(id).then((res: any) => {
+            if (res.code === 200 && res.data) {
+              handleViewDetail(res.data);
+            }
+          }).catch(() => {});
+        }
+      }
+    }
+  }, [searchParams, data]);
 
   const getTargetClassLabel = (cls: string) => {
     const opt = TARGET_CLASS_OPTIONS.find((o) => o.value === cls);

@@ -229,6 +229,14 @@ export const globalTrackApi = {
     request.post<any, Result<any>>('/api/tracks/find-match', data),
   updateStatus: (id: number, status: number) =>
     request.post<any, Result<any>>(`/api/tracks/${id}/status`, null, { params: { status } }),
+  batchAddPoints: (points: any[]) =>
+    request.post<any, Result<any>>('/api/tracks/points/batch', points),
+  listByEvent: (eventId: number) =>
+    request.get<any, Result<any>>(`/api/tracks/by-event/${eventId}`),
+  eventLinks: (eventId: number) =>
+    request.get<any, Result<any>>(`/api/tracks/event-links/${eventId}`),
+  linkEvent: (data: any) =>
+    request.post<any, Result<any>>('/api/tracks/link-event', data),
 };
 
 export default request;

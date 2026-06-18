@@ -3,6 +3,7 @@ package com.traffic.alert.controller;
 import com.traffic.alert.common.PageResult;
 import com.traffic.alert.common.Result;
 import com.traffic.alert.dto.GlobalTrackQuery;
+import com.traffic.alert.entity.EventTrackLink;
 import com.traffic.alert.entity.GlobalTrack;
 import com.traffic.alert.entity.TrackMatchLog;
 import com.traffic.alert.entity.TrackPoint;
@@ -117,5 +118,40 @@ public class GlobalTrackController {
     public Result<Void> updateTrackStatus(@PathVariable Long id, @RequestParam int status) {
         globalTrackService.updateTrackStatus(id, status);
         return Result.success();
+    }
+
+    @Operation(summary = "批量添加轨迹点（AI引擎推送）")
+    @PostMapping("/points/batch")
+    public Result<Integer> batchAddTrackPoints(@RequestBody List<TrackPoint> points) {
+        return Result.success(globalTrackService.batchAddTrackPoints(points));
+    }
+
+    @Operation(summary = "获取事件关联的轨迹列表")
+    @GetMapping("/by-event/{eventId}")
+    public Result<List<GlobalTrack>> listByEvent(@PathVariable Long eventId) {
+        return Result.success(globalTrackService.listByEvent(eventId));
+    }
+
+    @Operation(summary = "获取事件轨迹关联列表")
+    @GetMapping("/event-links/{eventId}")
+    public Result<List<EventTrackLink>> listEventLinks(@PathVariable Long eventId) {
+        return Result.success(globalTrackService.listEventLinks(eventId));
+    }
+
+    @Operation(summary = "关联告警事件与轨迹")
+    @PostMapping("/link-event")
+    public Result<EventTrackLink> linkEventToTrack(@RequestBody Map<String, Object> params) {
+        Long eventId = params.get("eventId") != null ? Long.valueOf(params.get("eventId").toString()) : null;
+        String eventNo = (String) params.get("eventNo");
+        Long trackId = params.get("trackId") != null ? Long.valueOf(params.get("trackId").toString()) : null;
+        String trackNo = (String) params.get("trackNo");
+        Integer linkType = params.get("linkType") != null ? Integer.valueOf(params.get("linkType").toString()) : null;
+        Long cameraId = params.get("cameraId") != null ? Long.valueOf(params.get("cameraId").toString()) : null;
+        Long trackPointId = params.get("trackPointId") != null ? Long.valueOf(params.get("trackPointId").toString()) : null;
+        String description = (String) params.get("description");
+
+        return Result.success(globalTrackService.linkEventToTrack(
+                eventId, eventNo, trackId, trackNo, linkType, null, cameraId, trackPointId, description
+        ));
     }
 }

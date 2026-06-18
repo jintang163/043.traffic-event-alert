@@ -383,6 +383,22 @@ CREATE TABLE IF NOT EXISTS event_track_link (
     INDEX idx_track (track_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS camera_neighbor (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    camera_id BIGINT NOT NULL COMMENT '当前摄像头ID',
+    neighbor_camera_id BIGINT NOT NULL COMMENT '相邻摄像头ID',
+    neighbor_camera_name VARCHAR(128),
+    direction INT DEFAULT 0 COMMENT '相对方向: 0-同向 1-反向 2-交叉',
+    distance DECIMAL(10,2) COMMENT '距离(米)',
+    travel_time_seconds INT COMMENT '预计行程时间(秒)',
+    priority INT DEFAULT 0 COMMENT '优先级, 数值越小越优先',
+    description VARCHAR(256),
+    create_time DATETIME,
+    UNIQUE KEY uk_cam_neighbor (camera_id, neighbor_camera_id),
+    INDEX idx_camera (camera_id),
+    INDEX idx_neighbor (neighbor_camera_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT INTO global_track (track_no, target_class, license_plate, plate_confidence, color, vehicle_type,
     first_camera_id, first_camera_name, last_camera_id, last_camera_name,
     first_longitude, first_latitude, last_longitude, last_latitude,

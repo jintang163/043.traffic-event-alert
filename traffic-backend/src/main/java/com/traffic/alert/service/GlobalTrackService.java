@@ -6,9 +6,11 @@ import com.traffic.alert.common.BusinessException;
 import com.traffic.alert.common.PageResult;
 import com.traffic.alert.dto.GlobalTrackQuery;
 import com.traffic.alert.entity.Camera;
+import com.traffic.alert.entity.EventTrackLink;
 import com.traffic.alert.entity.GlobalTrack;
 import com.traffic.alert.entity.TrackMatchLog;
 import com.traffic.alert.entity.TrackPoint;
+import com.traffic.alert.mapper.EventTrackLinkMapper;
 import com.traffic.alert.mapper.GlobalTrackMapper;
 import com.traffic.alert.mapper.TrackMatchLogMapper;
 import com.traffic.alert.mapper.TrackPointMapper;
@@ -31,6 +33,7 @@ public class GlobalTrackService {
     private final GlobalTrackMapper globalTrackMapper;
     private final TrackPointMapper trackPointMapper;
     private final TrackMatchLogMapper trackMatchLogMapper;
+    private final EventTrackLinkMapper eventTrackLinkMapper;
     private final CameraService cameraService;
 
     private static final DateTimeFormatter TRACK_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
@@ -357,5 +360,129 @@ public class GlobalTrackService {
             t.setTrackStatus(status);
             globalTrackMapper.updateById(t);
         }
+    }
+
+    @Transactional
+    public int batchAddTrackPoints(List<TrackPoint> points) {
+        if (points == null || points.isEmpty()) return 0;
+        for (TrackPoint p : points) {
+            trackPointMapper.insert(p);
+        }
+
+        Set<Long> trackIds = new HashSet<>();
+        for (TrackPoint p : points) {
+            if (p.getTrackId() != null) {
+                trackIds.add(p.getTrackId());
+            }
+        }
+
+        for (Long trackId : trackIds) {
+            GlobalTrack track = getById(trackId);
+            if (track != null) {
+                long count = points.stream().filter(p -> trackId.equals(p.getTrackId())).count();
+                track.setPointCount((track.getPointCount() == null ? 0 : track.getPointCount()) + (int) count);
+
+                TrackPoint last = points.stream()
+                        .filter(p -> trackId.equals(p.getTrackId()))
+                        .max(Comparator.comparing(TrackPoint::getFrameTime))
+                        .orElse(null);
+                if (last != null) {
+                    track.setLastSeenTime(last.getFrameTime());
+                    if (last.getLongitude() != null) track.setLastLongitude(last.getLongitude());
+                    if (last.getLatitude() != null) track.setLastLatitude(last.getLatitude());
+                    track.setLastCameraId(last.getCameraId());
+                    track.setLastCameraName(last.getCameraName());
+                }
+
+                TrackPoint first = points.stream()
+                        .filter(p -> trackId.equals(p.getTrackId()))
+                        .min(Comparator.comparing(TrackPoint::getFrameTime))
+                        .orElse(null);
+                if (first != null && track.getFirstSeenTime() == null) {
+                    track.setFirstSeenTime(first.getFrameTime());
+                    track.setFirstCameraId(first.getCameraId());
+                    track.setFirstCameraName(first.getCameraName());
+                }
+
+                globalTrackMapper.updateById(track);
+            }
+        }
+
+        return points.size();
+    }
+
+    @Transactional
+    public EventTrackLink linkEventToTrack(Long eventId, String eventNo, Long trackId, String trackNo,
+                                           Integer linkType, BigDecimal linkConfidence,
+                                           Long cameraId, Long trackPointId, String description) {
+        EventTrackLink link = new EventTrackLink();
+        link.setEventId(eventId);
+        link.setEventNo(eventNo);
+        link.setTrackId(trackId);
+        link.setTrackNo(trackNo);
+        link.setLinkType(linkType != null ? linkType : 1);
+        link.setLinkConfidence(linkConfidence);
+        link.setCameraId(cameraId);
+        link.setTrackPointId(trackPointId);
+        link.setDescription(description);
+        eventTrackLinkMapper.insert(link);
+
+        GlobalTrack track = getById(trackId);
+        if (track != null) {
+            track.setIsEventTarget(1);
+            track.setLinkedEventCount((track.getLinkedEventCount() == null ? 0 : track.getLinkedEventCount()) + 1);
+            globalTrackMapper.updateById(track);
+        }
+
+        log.info("关联告警事件与轨迹: eventId={}, trackId={}, linkType={}", eventId, trackId, linkType);
+        return link;
+    }
+
+    public List<GlobalTrack> listByEvent(Long eventId) {
+        LambdaQueryWrapper<EventTrackLink> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(EventTrackLink::getEventId, eventId)
+                .orderByAsc(EventTrackLink::getLinkType);
+        List<EventTrackLink> links = eventTrackLinkMapper.selectList(wrapper);
+
+        List<GlobalTrack> tracks = new ArrayList<>();
+        for (EventTrackLink link : links) {
+            GlobalTrack track = getById(link.getTrackId());
+            if (track != null) {
+                tracks.add(track);
+            }
+        }
+        return tracks;
+    }
+
+    public List<EventTrackLink> listEventLinks(Long eventId) {
+        LambdaQueryWrapper<EventTrackLink> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(EventTrackLink::getEventId, eventId);
+        return eventTrackLinkMapper.selectList(wrapper);
+    }
+
+    public GlobalTrack findOrCreateTrackFromEvent(String licensePlate, String reidFeature,
+                                                   String targetClass, Long cameraId,
+                                                   String cameraName, LocalDateTime eventTime) {
+        GlobalTrack matched = findMatchingTrack(licensePlate, reidFeature, targetClass, cameraId, JOINT_MATCH_THRESHOLD);
+        if (matched != null) {
+            return matched;
+        }
+
+        GlobalTrack track = new GlobalTrack();
+        track.setTargetClass(targetClass);
+        track.setLicensePlate(licensePlate);
+        track.setReidFeature(reidFeature);
+        track.setFirstCameraId(cameraId);
+        track.setFirstCameraName(cameraName);
+        track.setLastCameraId(cameraId);
+        track.setLastCameraName(cameraName);
+        track.setFirstSeenTime(eventTime);
+        track.setLastSeenTime(eventTime);
+        track.setCameraCount(1);
+        track.setPointCount(0);
+        track.setTrackStatus(1);
+        track.setIsEventTarget(1);
+        track.setLinkedEventCount(0);
+        return createTrack(track);
     }
 }

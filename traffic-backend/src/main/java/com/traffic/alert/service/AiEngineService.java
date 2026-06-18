@@ -207,4 +207,26 @@ public class AiEngineService {
             return false;
         }
     }
+
+    public boolean setCameraNeighbors(Long cameraId, List<String> neighborIds) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/track-cross/neighbors/" + cameraId;
+            String jsonBody = JSON.toJSONString(neighborIds);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("同步摄像头相邻关系到AI引擎: cameraId={}, neighbors={}, response={}",
+                    cameraId, neighborIds.size(), response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("同步摄像头相邻关系到AI引擎失败: cameraId={}, error={}", cameraId, e.getMessage());
+            return false;
+        }
+    }
 }

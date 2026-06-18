@@ -34,9 +34,10 @@ import {
   EnvironmentOutlined,
   PlayCircleOutlined,
   PlusOutlined,
+  CarOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { alertApi, workOrderApi, departmentApi } from '@/services/api';
+import { alertApi, workOrderApi, departmentApi, globalTrackApi } from '@/services/api';
 import { wsService } from '@/services/websocket';
 import { useAlertStore } from '@/store/alertStore';
 import {
@@ -47,6 +48,7 @@ import {
   type AlertEvent,
   type Department,
   type WorkOrder,
+  type GlobalTrack,
 } from '@/types';
 
 const { RangePicker } = DatePicker;
@@ -65,6 +67,7 @@ const Alerts: React.FC = () => {
   const [detailDrawer, setDetailDrawer] = useState(false);
   const [currentAlert, setCurrentAlert] = useState<AlertEvent | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [linkedTracks, setLinkedTracks] = useState<GlobalTrack[]>([]);
   const [falseModal, setFalseModal] = useState(false);
   const [handleModal, setHandleModal] = useState(false);
   const [orderModal, setOrderModal] = useState(false);
@@ -132,6 +135,13 @@ const Alerts: React.FC = () => {
       if (res.code === 200) setWorkOrders(res.data);
     } catch (e) {
       setWorkOrders([]);
+    }
+    try {
+      const res: any = await globalTrackApi.listByEvent(record.id);
+      if (res.code === 200) setLinkedTracks(res.data || []);
+      else setLinkedTracks([]);
+    } catch (e) {
+      setLinkedTracks([]);
     }
     setDetailDrawer(true);
   };
@@ -205,6 +215,10 @@ const Alerts: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleViewTrack = (trackId: number) => {
+    navigate(`/tracks?id=${trackId}`);
   };
 
   const getLevelColor = (level: number) => {
@@ -550,6 +564,57 @@ const Alerts: React.FC = () => {
                 />
               </div>
             )}
+
+            <div style={{ marginTop: 24 }}>
+              <h4 style={{ marginBottom: 8 }}>
+                🚗 关联轨迹 ({linkedTracks.length})
+              </h4>
+              {linkedTracks.length === 0 ? (
+                <div style={{ color: '#999', fontSize: 13, padding: '12px 0' }}>
+                  暂无关联轨迹
+                </div>
+              ) : (
+                <Table
+                  size="small"
+                  dataSource={linkedTracks}
+                  rowKey="id"
+                  pagination={false}
+                  columns={[
+                    { title: '轨迹编号', dataIndex: 'trackNo' },
+                    { title: '车牌号', dataIndex: 'licensePlate', render: (v) => v || '-' },
+                    { title: '车辆类型', dataIndex: 'vehicleType', render: (v) => v || '-' },
+                    {
+                      title: '状态',
+                      dataIndex: 'trackStatus',
+                      render: (val) => {
+                        const labels: Record<number, string> = { 1: '跟踪中', 2: '已丢失', 3: '已完成' };
+                        const colors: Record<number, string> = { 1: 'processing', 2: 'warning', 3: 'default' };
+                        return <Tag color={colors[val]}>{labels[val]}</Tag>;
+                      },
+                    },
+                    {
+                      title: '摄像头数',
+                      dataIndex: 'cameraCount',
+                      width: 90,
+                      align: 'center',
+                    },
+                    {
+                      title: '操作',
+                      render: (_, r: any) => (
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<CarOutlined />}
+                          onClick={() => handleViewTrack(r.id)}
+                        >
+                          查看轨迹
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+            </div>
           </div>
         )}
       </Drawer>

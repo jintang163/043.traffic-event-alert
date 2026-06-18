@@ -40,6 +40,7 @@ public class AlertEventService {
     private final MinioService minioService;
     private final NotificationService notificationService;
     private final PtzCruiseService ptzCruiseService;
+    private final GlobalTrackService globalTrackService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -144,7 +145,54 @@ public class AlertEventService {
             autoCreateWorkOrder(event);
         }
 
+        if (request.getTrackData() != null && !request.getTrackData().isEmpty()) {
+            try {
+                linkEventToTracks(event, request.getTrackData(), camera);
+            } catch (Exception e) {
+                log.warn("关联告警事件与轨迹失败: eventNo={}, error={}", eventNo, e.getMessage());
+            }
+        }
+
         return event;
+    }
+
+    private void linkEventToTracks(AlertEvent event, List<Map<String, Object>> trackData, Camera camera) {
+        int linkedCount = 0;
+        for (Map<String, Object> track : trackData) {
+            String plate = null;
+            String className = null;
+            Integer localTrackId = null;
+
+            if (track.get("trackId") != null) {
+                localTrackId = ((Number) track.get("trackId")).intValue();
+            }
+            if (track.get("className") != null) {
+                className = track.get("className").toString();
+            }
+
+            try {
+                var gt = globalTrackService.findOrCreateTrackFromEvent(
+                        plate, null, className,
+                        camera.getId(), camera.getCameraName(),
+                        event.getEventTime()
+                );
+                if (gt != null) {
+                    globalTrackService.linkEventToTrack(
+                            event.getId(), event.getEventNo(),
+                            gt.getId(), gt.getTrackNo(),
+                            1, null,
+                            camera.getId(), null,
+                            "事件发生时自动关联"
+                    );
+                    linkedCount++;
+                }
+            } catch (Exception e) {
+                log.warn("关联单条轨迹失败: trackId={}, error={}", localTrackId, e.getMessage());
+            }
+        }
+        if (linkedCount > 0) {
+            log.info("告警事件已关联{}条轨迹: eventNo={}", linkedCount, event.getEventNo());
+        }
     }
 
     private void autoCreateWorkOrder(AlertEvent event) {

@@ -8,8 +8,10 @@ import com.traffic.alert.config.DeviceSdkConfig;
 import com.traffic.alert.dto.CameraQuery;
 import com.traffic.alert.dto.PtzControlRequest;
 import com.traffic.alert.entity.Camera;
+import com.traffic.alert.entity.CameraNeighbor;
 import com.traffic.alert.entity.GeoFence;
 import com.traffic.alert.mapper.CameraMapper;
+import com.traffic.alert.mapper.CameraNeighborMapper;
 import com.alibaba.fastjson2.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,7 @@ import java.util.Map;
 public class CameraService {
 
     private final CameraMapper cameraMapper;
+    private final CameraNeighborMapper cameraNeighborMapper;
     private final AiEngineService aiEngineService;
     private final GeoFenceService geoFenceService;
     private final DeviceSdkConfig deviceSdkConfig;
@@ -122,6 +125,23 @@ public class CameraService {
                     }
                 } catch (Exception e) {
                     log.warn("摄像头[{}]同步围栏到AI引擎失败: {}", camera.getId(), e.getMessage());
+                }
+
+                try {
+                    List<CameraNeighbor> neighbors = cameraNeighborMapper.selectList(
+                            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CameraNeighbor>()
+                                    .eq(CameraNeighbor::getCameraId, camera.getId())
+                                    .orderByAsc(CameraNeighbor::getPriority)
+                    );
+                    if (!neighbors.isEmpty()) {
+                        List<String> neighborIds = neighbors.stream()
+                                .map(n -> String.valueOf(n.getNeighborCameraId()))
+                                .toList();
+                        aiEngineService.setCameraNeighbors(camera.getId(), neighborIds);
+                        log.info("摄像头[{}]启动检测后同步 {} 个相邻摄像头到AI引擎", camera.getId(), neighbors.size());
+                    }
+                } catch (Exception e) {
+                    log.warn("摄像头[{}]同步相邻摄像头到AI引擎失败: {}", camera.getId(), e.getMessage());
                 }
             }
         } else if (!isNew && before != null && before.getStatus() == 1 && camera.getStatus() != null && camera.getStatus() == 0) {

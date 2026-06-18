@@ -15,8 +15,11 @@ import numpy as np
 from app.config.settings import settings
 from app.core.detector import detector
 from app.core.event_analyzer import event_analyzer
-from app.core.tracker import get_tracker, reset_tracker
+from app.core.tracker import get_tracker, reset_tracker, TrackState
+from app.core.cross_camera_tracker import cross_camera_tracker
+from app.core.feature_extractor import plate_recognizer, reid_extractor
 from app.schemas.event import AiEventCallbackRequest
+from app.schemas.reid import CrossCameraTrackRequest, LicensePlateResult, ReIDFeature
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +81,11 @@ class StreamProcessor:
                 "last_detection_push": 0.0,
                 "recording_lock": threading.Lock(),
                 "is_recording": False,
+                "track_point_buffer": [],
+                "track_point_lock": threading.Lock(),
+                "last_track_push": 0.0,
+                "lost_tracks": set(),
+                "registered_tracks": set(),
             }
 
             reset_tracker(str(camera_id))
@@ -230,6 +238,17 @@ class StreamProcessor:
                             args=(camera_id, event, frame, stream_info),
                             daemon=True
                         ).start()
+
+            self._process_tracking_features(camera_id, frame, tracked_objects, stream_info)
+
+            self._check_lost_tracks(camera_id, frame, stream_info)
+
+            self._collect_track_points(camera_id, frame, tracked_objects, stream_info)
+
+            now = time.time()
+            if now - stream_info["last_track_push"] >= settings.TRACK_POINT_PUSH_INTERVAL:
+                stream_info["last_track_push"] = now
+                self._flush_track_points(camera_id, stream_info)
 
             return tracked_objects
 
@@ -390,6 +409,209 @@ class StreamProcessor:
         except Exception as e:
             logger.error(f"[{camera_id}] Upload video exception: {e}", exc_info=True)
             return None
+
+    def _process_tracking_features(self, camera_id: int, frame: np.ndarray,
+                                    tracked_objects: List, stream_info: Dict):
+        if not tracked_objects:
+            return
+
+        for obj in tracked_objects:
+            track_key = obj.track_id
+            if track_key in stream_info["registered_tracks"]:
+                continue
+
+            if obj.hits < 5 or obj.confidence < 0.4:
+                continue
+
+            plate_result = plate_recognizer.recognize(obj, frame)
+            reid_result = reid_extractor.extract(obj, frame)
+
+            global_id = cross_camera_tracker.register_track(
+                camera_id=str(camera_id),
+                local_track_id=obj.track_id,
+                class_name=obj.class_name,
+                reid_feature=reid_result.feature_vector if reid_result else None,
+                confidence=float(obj.confidence),
+                license_plate=plate_result
+            )
+
+            stream_info["registered_tracks"].add(track_key)
+            logger.debug(f"Camera {camera_id}: registered track {obj.track_id} -> global {global_id}")
+
+    def _is_leaving_frame(self, bbox, frame_width: int, frame_height: int, margin_ratio: float = 0.05) -> Tuple[bool, Optional[str]]:
+        margin_w = frame_width * margin_ratio
+        margin_h = frame_height * margin_ratio
+        x1, y1, x2, y2 = bbox.x1, bbox.y1, bbox.x2, bbox.y2
+
+        if x1 <= margin_w:
+            return True, "left"
+        if x2 >= frame_width - margin_w:
+            return True, "right"
+        if y1 <= margin_h:
+            return True, "top"
+        if y2 >= frame_height - margin_h:
+            return True, "bottom"
+        return False, None
+
+    def _check_lost_tracks(self, camera_id: int, frame: np.ndarray, stream_info: Dict):
+        tracker = get_tracker(str(camera_id))
+        if not tracker:
+            return
+
+        frame_h, frame_w = frame.shape[:2]
+
+        for track_id, track in list(tracker.tracks.items()):
+            if track_id in stream_info["lost_tracks"]:
+                continue
+
+            is_lost = False
+            reason = ""
+
+            if track.state == TrackState.LOST or track.state == TrackState.REMOVED:
+                is_lost = True
+                reason = f"track_state_{track.state}"
+
+            leaving, direction = self._is_leaving_frame(track.bbox, frame_w, frame_h)
+            if leaving and track.time_since_update >= 2:
+                is_lost = True
+                reason = f"leaving_{direction}"
+
+            if is_lost and track.hits >= 8:
+                stream_info["lost_tracks"].add(track_id)
+
+                plate_result = LicensePlateResult(
+                    plate_number=None,
+                    confidence=0.0
+                )
+                try:
+                    from app.core.feature_extractor import plate_recognizer as pr
+                    cached = pr._plate_cache.get(str(track_id))
+                    if cached:
+                        plate_result = cached
+                except Exception:
+                    pass
+
+                reid_feat = reid_extractor.get_best_feature(track_id)
+
+                leave_direction = 0.0
+                if track.velocity:
+                    import math
+                    leave_direction = math.atan2(track.velocity[1], track.velocity[0]) if track.velocity else 0.0
+
+                req = CrossCameraTrackRequest(
+                    camera_id=str(camera_id),
+                    leaving_track_id=track_id,
+                    target_class=track.class_name,
+                    license_plate=plate_result,
+                    reid_feature=ReIDFeature(
+                        track_id=track_id,
+                        camera_id=str(camera_id),
+                        feature_vector=reid_feat if reid_feat else [],
+                        timestamp=time.time()
+                    ) if reid_feat else None,
+                    leave_direction=leave_direction,
+                    leave_time=time.time()
+                )
+
+                try:
+                    result = cross_camera_tracker.handle_cross_camera(req)
+                    logger.info(
+                        f"Camera {camera_id}: track {track_id} left ({reason}), "
+                        f"handover={'success' if result.handover else 'failed'}, "
+                        f"global_id={result.matched_track_id}, confidence={result.confidence:.3f}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Cross-camera handover failed for track {track_id}: {e}")
+
+    def _collect_track_points(self, camera_id: int, frame: np.ndarray,
+                              tracked_objects: List, stream_info: Dict):
+        if not tracked_objects:
+            return
+
+        frame_h, frame_w = frame.shape[:2]
+        now = time.time()
+
+        points = []
+        for obj in tracked_objects[:50]:
+            cx = (obj.bbox.x1 + obj.bbox.x2) / 2
+            cy = (obj.bbox.y1 + obj.bbox.y2) / 2
+
+            global_id = None
+            try:
+                rec = cross_camera_tracker.get_track_record(str(camera_id), obj.track_id)
+                if rec:
+                    global_id = rec.global_track_id
+            except Exception:
+                pass
+
+            point = {
+                "cameraId": camera_id,
+                "cameraName": "",
+                "trackId": None,
+                "globalTrackId": global_id,
+                "localTrackId": obj.track_id,
+                "frameTime": datetime.now().isoformat(),
+                "pixelX": round(cx / frame_w, 4),
+                "pixelY": round(cy / frame_h, 4),
+                "bbox": [obj.bbox.x1, obj.bbox.y1, obj.bbox.x2, obj.bbox.y2],
+                "speed": 0.0,
+                "direction": 0.0,
+                "confidence": float(obj.confidence),
+                "isKeyPoint": 0,
+                "className": obj.class_name,
+            }
+
+            if obj.velocity:
+                import math
+                vx, vy = obj.velocity
+                speed = math.sqrt(vx * vx + vy * vy)
+                direction = math.atan2(vy, vx)
+                point["speed"] = round(speed, 2)
+                point["direction"] = round(direction, 4)
+
+            points.append(point)
+
+        with stream_info["track_point_lock"]:
+            stream_info["track_point_buffer"].extend(points)
+
+    def _flush_track_points(self, camera_id: int, stream_info: Dict):
+        with stream_info["track_point_lock"]:
+            points = stream_info["track_point_buffer"]
+            if not points:
+                return
+            stream_info["track_point_buffer"] = []
+
+        if not settings.BACKEND_ENABLE_CALLBACK:
+            return
+
+        try:
+            asyncio.run(self._send_track_points_to_backend(points))
+        except Exception as e:
+            logger.warning(f"Failed to push track points for camera {camera_id}: {e}")
+            with stream_info["track_point_lock"]:
+                stream_info["track_point_buffer"].extend(points)
+                if len(stream_info["track_point_buffer"]) > 500:
+                    stream_info["track_point_buffer"] = stream_info["track_point_buffer"][-500:]
+
+    async def _send_track_points_to_backend(self, points: List[Dict]):
+        if not points or not settings.BACKEND_TRACK_POINT_URL:
+            return
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    settings.BACKEND_TRACK_POINT_URL,
+                    json=points
+                )
+                if resp.status_code == 200:
+                    result = resp.json()
+                    if result.get("code") == 200:
+                        logger.debug(f"Pushed {len(points)} track points to backend")
+                        return
+                logger.warning(f"Track point push failed: {resp.status_code} {resp.text[:200]}")
+        except Exception as e:
+            logger.warning(f"Track point push exception: {e}")
+            raise
 
     async def _push_detections(self, camera_id: int, tracked_objects, frame: np.ndarray):
         if not settings.DETECTION_PUSH_ENABLED or not tracked_objects:

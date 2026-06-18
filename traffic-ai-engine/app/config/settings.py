@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     DETECTION_PUSH_ENABLED: bool = Field(default=True, env="DETECTION_PUSH_ENABLED")
     DETECTION_PUSH_INTERVAL: float = Field(default=0.5, env="DETECTION_PUSH_INTERVAL")
 
+    BACKEND_TRACK_POINT_URL: str = Field(default="http://localhost:8080/api/tracks/points/batch", env="BACKEND_TRACK_POINT_URL")
+    TRACK_POINT_PUSH_INTERVAL: float = Field(default=5.0, env="TRACK_POINT_PUSH_INTERVAL")
+
     class Config:
         env_file = ".env"
         case_sensitive = True
