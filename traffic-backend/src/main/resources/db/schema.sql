@@ -228,3 +228,40 @@ INSERT INTO camera (camera_code, camera_name, protocol, stream_url, manufacturer
 ('CAM002', '京港澳高速K100+500南', 'RTSP', 'rtsp://192.168.1.102:554/stream1', '海康威视', '京港澳高速K100+500南方向', 116.397400, 39.903200, '京港澳高速', 2, 4, 1, 1, 1, NOW()),
 ('CAM003', '京藏高速K50+200东', 'RTSP', 'rtsp://192.168.1.103:554/stream1', '大华', '京藏高速K50+200东方向', 116.407400, 39.914200, '京藏高速', 1, 3, 1, 0, 0, NOW()),
 ('CAM004', '京藏高速K50+200西', 'RTSP', 'rtsp://192.168.1.104:554/stream1', '大华', '京藏高速K50+200西方向', 116.408400, 39.914200, '京藏高速', 2, 3, 1, 1, 0, NOW());
+
+CREATE TABLE IF NOT EXISTS geo_fence (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    fence_code VARCHAR(64) NOT NULL UNIQUE,
+    fence_name VARCHAR(128) NOT NULL,
+    fence_type INT DEFAULT 1 COMMENT '围栏类型：1-施工区 2-应急车道 3-禁入区 4-自定义',
+    camera_id BIGINT,
+    camera_name VARCHAR(128),
+    polygon_points TEXT COMMENT '多边形顶点坐标JSON数组 [[lng,lat],...]',
+    center_longitude DECIMAL(10,6),
+    center_latitude DECIMAL(10,6),
+    area DECIMAL(12,2) COMMENT '面积 平方米',
+    alert_enabled INT DEFAULT 1 COMMENT '是否启用告警',
+    alert_level INT DEFAULT 2 COMMENT '告警级别 1-一般 2-严重 3-紧急',
+    detect_target_types VARCHAR(256) COMMENT '检测目标类型，逗号分隔：person,car,truck,bus',
+    stay_seconds INT DEFAULT 0 COMMENT '停留多久触发告警，0表示立即触发',
+    cooldown_seconds INT DEFAULT 60 COMMENT '告警冷却时间 秒',
+    notify_enabled INT DEFAULT 1 COMMENT '是否启用通知',
+    notify_dept_ids VARCHAR(512) COMMENT '通知部门ID列表，逗号分隔',
+    link_work_order INT DEFAULT 0 COMMENT '是否自动联动工单',
+    color VARCHAR(16) DEFAULT '#ff4d4f' COMMENT '围栏显示颜色',
+    description VARCHAR(512),
+    sort_order INT DEFAULT 0,
+    status INT DEFAULT 1,
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_fence_code (fence_code),
+    INDEX idx_fence_type (fence_type),
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO geo_fence (fence_code, fence_name, fence_type, camera_id, camera_name, polygon_points, center_longitude, center_latitude, area, alert_enabled, alert_level, detect_target_types, stay_seconds, cooldown_seconds, notify_enabled, link_work_order, color, description, sort_order, status, create_time) VALUES
+('FENCE001', 'K100+500施工区', 1, 1, '京港澳高速K100+500北', '[[116.3970,39.9045],[116.3978,39.9045],[116.3978,39.9040],[116.3970,39.9040]]', 116.397400, 39.904250, 2500.00, 1, 2, 'person,car,truck', 5, 60, 1, 1, '#faad14', 'K100+500处道路施工区域', 1, 1, NOW()),
+('FENCE002', 'K100+500应急车道', 2, 1, '京港澳高速K100+500北', '[[116.3965,39.9043],[116.3969,39.9043],[116.3969,39.9038],[116.3965,39.9038]]', 116.396700, 39.904050, 1200.00, 1, 3, 'car,truck,bus', 3, 120, 1, 1, '#ff4d4f', '应急车道禁入区域', 2, 1, NOW()),
+('FENCE003', 'K50+200禁入区', 3, 3, '京藏高速K50+200东', '[[116.4070,39.9145],[116.4078,39.9145],[116.4078,39.9140],[116.4070,39.9140]]', 116.407400, 39.914250, 1800.00, 1, 2, 'person', 0, 60, 1, 0, '#52c41a', '行人禁入区域', 3, 1, NOW());

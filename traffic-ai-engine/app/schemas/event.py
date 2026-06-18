@@ -10,6 +10,7 @@ class EventType(str, Enum):
     ACCIDENT = "ACCIDENT"
     REVERSE = "REVERSE"
     DEBRIS = "DEBRIS"
+    INTRUSION = "INTRUSION"
     SPEEDING = "speeding"
     RED_LIGHT = "red_light"
     WRONG_WAY = "wrong_way"

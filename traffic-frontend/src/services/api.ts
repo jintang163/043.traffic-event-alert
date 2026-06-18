@@ -179,4 +179,29 @@ export const ptzCruiseApi = {
     request.get<any, Result<any>>(`/api/ptz/cruise/status/${cameraId}`),
 };
 
+export const geoFenceApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/geo-fences/page', { params }),
+  list: (cameraId?: number) =>
+    request.get<any, Result<any>>('/api/geo-fences/enabled', { params: { cameraId } }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/geo-fences/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/geo-fences', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/geo-fences/${id}`),
+  toggleAlert: (id: number, enabled: boolean) =>
+    request.post<any, Result<any>>(`/api/geo-fences/${id}/alert`, null, { params: { enabled } }),
+  toggleStatus: (id: number, status: number) =>
+    request.post<any, Result<any>>(`/api/geo-fences/${id}/status`, null, { params: { status } }),
+  listByCamera: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/geo-fences/camera/${cameraId}`),
+  checkPoint: (id: number, lng: number, lat: number) =>
+    request.get<any, Result<any>>(`/api/geo-fences/${id}/check-point`, { params: { lng, lat } }),
+  containingPoint: (lng: number, lat: number, cameraId?: number) =>
+    request.get<any, Result<any>>('/api/geo-fences/containing-point', { params: { lng, lat, cameraId } }),
+  calculateArea: (points: number[][]) =>
+    request.post<any, Result<any>>('/api/geo-fences/calculate-area', { points }),
+};
+
 export default request;

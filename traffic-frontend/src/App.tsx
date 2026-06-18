@@ -7,6 +7,7 @@ import Cameras from '@/pages/Cameras';
 import Alerts from '@/pages/Alerts';
 import WorkOrders from '@/pages/WorkOrders';
 import Departments from '@/pages/Departments';
+import GeoFences from '@/pages/GeoFences';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -79,6 +80,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Departments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/geo-fences"
+          element={
+            <ProtectedRoute>
+              <GeoFences />
             </ProtectedRoute>
           }
         />

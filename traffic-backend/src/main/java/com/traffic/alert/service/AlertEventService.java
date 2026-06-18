@@ -166,6 +166,7 @@ public class AlertEventService {
                     case "ACCIDENT" -> "交通事故";
                     case "REVERSE" -> "车辆逆行";
                     case "DEBRIS" -> "路面抛洒物";
+                    case "INTRUSION" -> "区域入侵";
                     default -> event.getEventType();
                 };
                 workOrder.setTitle(typeText + "处置工单 - " + event.getCameraName());

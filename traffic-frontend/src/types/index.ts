@@ -123,6 +123,40 @@ export interface Department {
   description?: string;
 }
 
+export interface GeoFence {
+  id: number;
+  fenceCode: string;
+  fenceName: string;
+  fenceType: number;
+  cameraId?: number;
+  cameraName?: string;
+  polygonPoints: string;
+  centerLongitude?: number;
+  centerLatitude?: number;
+  area?: number;
+  alertEnabled: number;
+  alertLevel: number;
+  detectTargetTypes?: string;
+  staySeconds: number;
+  cooldownSeconds: number;
+  notifyEnabled: number;
+  notifyDeptIds?: string;
+  linkWorkOrder: number;
+  color: string;
+  description?: string;
+  sortOrder: number;
+  status: number;
+  createTime?: string;
+}
+
+export interface GeoFenceQuery extends PageQuery {
+  keyword?: string;
+  fenceType?: number;
+  cameraId?: number;
+  alertEnabled?: number;
+  status?: number;
+}
+
 export interface Result<T> {
   code: number;
   message: string;
@@ -214,7 +248,31 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   ACCIDENT: '交通事故',
   REVERSE: '车辆逆行',
   DEBRIS: '路面抛洒物',
+  INTRUSION: '区域入侵',
 };
+
+export const FENCE_TYPE_LABELS: Record<number, string> = {
+  1: '施工区',
+  2: '应急车道',
+  3: '禁入区',
+  4: '自定义',
+};
+
+export const FENCE_TYPE_COLORS: Record<number, string> = {
+  1: '#faad14',
+  2: '#ff4d4f',
+  3: '#52c41a',
+  4: '#1890ff',
+};
+
+export const DETECT_TARGET_OPTIONS = [
+  { value: 'person', label: '行人' },
+  { value: 'car', label: '轿车' },
+  { value: 'truck', label: '卡车' },
+  { value: 'bus', label: '公交车' },
+  { value: 'motorcycle', label: '摩托车' },
+  { value: 'bicycle', label: '自行车' },
+];
 
 export const EVENT_LEVEL_LABELS: Record<number, string> = {
   1: '一般',

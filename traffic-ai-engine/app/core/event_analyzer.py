@@ -8,6 +8,7 @@ import numpy as np
 
 from app.config.settings import settings
 from app.core.tracker import get_tracker, Track
+from app.core.fence_manager import fence_manager
 from app.schemas.event import (
     TrafficEvent, EventType, EventSeverity, EventLocation
 )
@@ -40,6 +41,9 @@ class EventAnalyzer:
 
         debris_events = self._detect_debris(camera_id, tracker, tracked_objects, frame_width, frame_height)
         events.extend(debris_events)
+
+        intrusion_events = self._detect_intrusion(camera_id, tracked_objects, frame_width, frame_height)
+        events.extend(intrusion_events)
 
         return events
 
@@ -190,6 +194,79 @@ class EventAnalyzer:
                             logger.warning(f"Debris detected: camera={camera_id}, track={track.track_id}, class={track.class_name}")
 
         return events
+
+    def _detect_intrusion(
+        self,
+        camera_id: str,
+        tracked_objects: List[TrackedObject],
+        frame_width: int,
+        frame_height: int
+    ) -> List[TrafficEvent]:
+        events: List[TrafficEvent] = []
+
+        try:
+            camera_id_int = int(camera_id) if camera_id and camera_id.isdigit() else None
+        except (ValueError, TypeError):
+            camera_id_int = None
+
+        intrusions = fence_manager.check_tracked_objects(
+            tracked_objects,
+            frame_width,
+            frame_height,
+            camera_id=camera_id_int
+        )
+
+        for intrusion in intrusions:
+            if not intrusion["should_alert"]:
+                continue
+
+            fence = intrusion["fence"]
+            obj = intrusion["tracked_object"]
+            duration = intrusion["duration"]
+
+            event_key = f"intrusion_{camera_id}_{fence.fence_id}_{obj.track_id}"
+            if self._is_in_cooldown(event_key):
+                continue
+
+            severity = EventSeverity(fence.alert_level) if fence.alert_level <= 4 else EventSeverity.MEDIUM
+            target_type_text = obj.class_name
+            fence_type_text = self._get_fence_type_text(fence.fence_type)
+
+            confidence = min(0.95, 0.7 + min(duration, 30) * 0.01)
+
+            event = self._create_event(
+                camera_id=camera_id,
+                event_type=EventType.INTRUSION,
+                severity=severity,
+                involved_objects=[obj],
+                confidence=confidence,
+                description=f"检测到{target_type_text}入侵{fence_type_text}「{fence.fence_name}」，已停留{duration:.1f}秒",
+            )
+            event.metadata = {
+                "fence_id": fence.fence_id,
+                "fence_code": fence.fence_code,
+                "fence_name": fence.fence_name,
+                "fence_type": fence.fence_type,
+                "intrusion_duration": duration,
+                "track_id": obj.track_id,
+                "target_class": obj.class_name,
+            }
+            events.append(event)
+            logger.warning(
+                f"区域入侵检测: camera={camera_id}, fence={fence.fence_name}, "
+                f"target={obj.class_name}, track={obj.track_id}, duration={duration:.1f}s"
+            )
+
+        return events
+
+    def _get_fence_type_text(self, fence_type: int) -> str:
+        type_map = {
+            1: "施工区",
+            2: "应急车道",
+            3: "禁入区",
+            4: "自定义区域",
+        }
+        return type_map.get(fence_type, "电子围栏")
 
     def _track_iou(self, t1: Track, t2: Track) -> float:
         x1 = max(t1.bbox.x1, t2.bbox.x1)

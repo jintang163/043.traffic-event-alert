@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
-from app.api import detect, track, event
+from app.api import detect, track, event, fence
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(detect.router, prefix=settings.API_V1_PREFIX + "/detect", tags=["detection"])
 app.include_router(track.router, prefix=settings.API_V1_PREFIX + "/track", tags=["tracking"])
 app.include_router(event.router, prefix=settings.API_V1_PREFIX + "/event", tags=["event"])
+app.include_router(fence.router, prefix=settings.API_V1_PREFIX + "/fence", tags=["fence"])
 
 
 @app.get("/health")

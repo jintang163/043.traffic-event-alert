@@ -9,6 +9,7 @@ import {
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -71,6 +72,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: '/departments',
       icon: <TeamOutlined />,
       label: '部门管理',
+    },
+    {
+      key: '/geo-fences',
+      icon: <EnvironmentOutlined />,
+      label: '电子围栏',
     },
   ];
 
