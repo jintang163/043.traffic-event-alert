@@ -17,6 +17,8 @@ public class WorkOrder extends BaseEntity {
 
     private String eventType;
 
+    private String debrisCategory;
+
     private Integer orderLevel;
 
     private String title;

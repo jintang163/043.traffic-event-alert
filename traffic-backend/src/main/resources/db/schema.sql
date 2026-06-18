@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS alert_event (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     event_no VARCHAR(64) NOT NULL UNIQUE,
     event_type VARCHAR(32) NOT NULL,
+    debris_category VARCHAR(32) DEFAULT NULL COMMENT '抛洒物子分类：TIRE/CARGO/CARDBOARD/ANIMAL/DEBRIS_BAG/CONSTRUCTION/METAL/PLASTIC/PAPER/GLASS/OTHER',
     event_level INT DEFAULT 1,
     camera_id BIGINT,
     camera_name VARCHAR(128),
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS alert_event (
     deleted INT DEFAULT 0,
     INDEX idx_event_no (event_no),
     INDEX idx_event_type (event_type),
+    INDEX idx_debris_category (debris_category),
     INDEX idx_event_level (event_level),
     INDEX idx_camera_id (camera_id),
     INDEX idx_event_time (event_time),
@@ -102,6 +104,7 @@ CREATE TABLE IF NOT EXISTS work_order (
     order_no VARCHAR(64) NOT NULL UNIQUE,
     alert_event_id BIGINT,
     event_type VARCHAR(32),
+    debris_category VARCHAR(32) DEFAULT NULL COMMENT '抛洒物子分类，来源alert_event.debris_category',
     order_level INT DEFAULT 1,
     title VARCHAR(256) NOT NULL,
     description TEXT,
@@ -122,6 +125,7 @@ CREATE TABLE IF NOT EXISTS work_order (
     deleted INT DEFAULT 0,
     INDEX idx_order_no (order_no),
     INDEX idx_alert_event_id (alert_event_id),
+    INDEX idx_debris_category (debris_category),
     INDEX idx_order_status (order_status),
     INDEX idx_assign_dept_id (assign_dept_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

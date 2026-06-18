@@ -100,6 +100,9 @@ public class WorkOrderService {
             businessData.put("eventType", workOrder.getEventType());
             businessData.put("eventLevel", workOrder.getOrderLevel());
             businessData.put("orderLevel", workOrder.getOrderLevel());
+            if (workOrder.getDebrisCategory() != null && !workOrder.getDebrisCategory().isEmpty()) {
+                businessData.put("debrisCategory", workOrder.getDebrisCategory());
+            }
 
             RuleExecuteResult result = ruleEngineService.executeAndApply(
                     WORK_ORDER_ASSIGN_RULE, formData, systemVars, businessData);

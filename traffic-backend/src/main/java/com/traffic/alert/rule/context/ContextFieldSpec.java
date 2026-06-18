@@ -97,6 +97,20 @@ public class ContextFieldSpec {
         eventTypeOptions.add(Map.of("value", "INTRUSION", "label", "区域入侵"));
         fields.add(new FieldDefinition(FieldCategory.BUSINESS.getKey(), "eventType", "事件类型", FieldType.ENUM.getKey(), "告警事件类型", "ACCIDENT").options(eventTypeOptions));
 
+        List<Map<String, Object>> debrisCategoryOptions = new ArrayList<>();
+        debrisCategoryOptions.add(Map.of("value", "TIRE", "label", "轮胎掉落(紧急L3)"));
+        debrisCategoryOptions.add(Map.of("value", "CARGO", "label", "货物掉落(紧急L3)"));
+        debrisCategoryOptions.add(Map.of("value", "ANIMAL", "label", "动物闯入(紧急L3)"));
+        debrisCategoryOptions.add(Map.of("value", "METAL", "label", "金属部件(紧急L3)"));
+        debrisCategoryOptions.add(Map.of("value", "CARDBOARD", "label", "纸箱(严重L2)"));
+        debrisCategoryOptions.add(Map.of("value", "DEBRIS_BAG", "label", "杂物袋/包裹(严重L2)"));
+        debrisCategoryOptions.add(Map.of("value", "CONSTRUCTION", "label", "建筑材料(严重L2)"));
+        debrisCategoryOptions.add(Map.of("value", "GLASS", "label", "玻璃碎片(严重L2)"));
+        debrisCategoryOptions.add(Map.of("value", "PLASTIC", "label", "塑料杂物(一般L1)"));
+        debrisCategoryOptions.add(Map.of("value", "PAPER", "label", "纸张/纸片(一般L1)"));
+        debrisCategoryOptions.add(Map.of("value", "OTHER", "label", "其他杂物(一般L1)"));
+        fields.add(new FieldDefinition(FieldCategory.BUSINESS.getKey(), "debrisCategory", "抛洒物子分类", FieldType.ENUM.getKey(), "仅当eventType=DEBRIS时有值", "TIRE").options(debrisCategoryOptions));
+
         fields.add(new FieldDefinition(FieldCategory.BUSINESS.getKey(), "eventLevel", "事件级别", FieldType.NUMBER.getKey(), "1-一般 2-严重 3-紧急", 2));
         fields.add(new FieldDefinition(FieldCategory.BUSINESS.getKey(), "cameraId", "摄像头ID", FieldType.NUMBER.getKey(), "所属摄像头ID", 1L));
         fields.add(new FieldDefinition(FieldCategory.BUSINESS.getKey(), "cameraName", "摄像头名称", FieldType.STRING.getKey(), "摄像头名称", "京港澳高速K100+500北"));
@@ -128,11 +142,12 @@ public class ContextFieldSpec {
         context.put("form", form);
 
         Map<String, Object> business = new HashMap<>();
-        business.put("eventType", "ACCIDENT");
-        business.put("eventLevel", 2);
+        business.put("eventType", "DEBRIS");
+        business.put("debrisCategory", "TIRE");
+        business.put("eventLevel", 3);
         business.put("cameraId", 1L);
         business.put("cameraName", "京港澳高速K100+500北");
-        business.put("orderLevel", 2);
+        business.put("orderLevel", 3);
         business.put("confidence", new BigDecimal("0.95"));
         context.put("business", business);
 

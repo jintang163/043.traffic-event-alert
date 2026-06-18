@@ -3,6 +3,7 @@ package com.traffic.alert.service;
 import com.alibaba.fastjson2.JSON;
 import com.traffic.alert.config.NotificationConfig;
 import com.traffic.alert.entity.AlertEvent;
+import com.traffic.alert.enums.DebrisCategory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -48,18 +49,33 @@ public class NotificationService {
         String typeText = switch (alert.getEventType()) {
             case "ACCIDENT" -> "交通事故";
             case "REVERSE" -> "车辆逆行";
-            case "DEBRIS" -> "路面抛洒物";
+            case "DEBRIS" -> {
+                if (alert.getDebrisCategory() != null && !alert.getDebrisCategory().isEmpty()) {
+                    yield "抛洒物-" + DebrisCategory.of(alert.getDebrisCategory()).getLabel();
+                }
+                yield "路面抛洒物";
+            }
             default -> alert.getEventType();
         };
 
+        String categoryLine = "";
+        if ("DEBRIS".equals(alert.getEventType()) && alert.getDebrisCategory() != null) {
+            DebrisCategory dc = DebrisCategory.of(alert.getDebrisCategory());
+            categoryLine = String.format(
+                    "抛洒物子类: %s (编码: %s, 预设等级: L%d)%n",
+                    dc.getLabel(), dc.getCode(), dc.getDefaultLevel());
+        }
+
         return String.format("%s 交通事件告警\n" +
                         "事件类型: %s\n" +
+                        "%s" +
                         "摄像头: %s\n" +
                         "位置: %s\n" +
                         "时间: %s\n" +
                         "置信度: %.2f%%\n" +
                         "描述: %s",
                 levelText, typeText,
+                categoryLine,
                 alert.getCameraName(),
                 alert.getLocation(),
                 alert.getEventTime(),

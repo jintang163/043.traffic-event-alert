@@ -104,19 +104,17 @@ public class AlertEventService {
         event.setEventType(request.getEventType());
 
         if ("DEBRIS".equals(request.getEventType())) {
-            DebrisCategory category = StringUtils.hasText(request.getDebrisCategory())
-                    ? DebrisCategory.of(request.getDebrisCategory())
-                    : debrisClassificationService.classify(
-                            request.getBbox() != null ? (String) request.getBbox().get("className") : null,
-                            request.getDescription(),
-                            request.getBbox());
+            DebrisCategory category = debrisClassificationService.validateAndResolve(request.getDebrisCategory());
+            if (category == null) {
+                category = debrisClassificationService.classify(
+                        request.getBbox() != null ? (String) request.getBbox().get("className") : null,
+                        request.getDescription(),
+                        request.getBbox());
+            }
             event.setDebrisCategory(category.getCode());
-            int autoLevel = request.getEventLevel() != null
-                    ? request.getEventLevel()
-                    : category.getDefaultLevel();
-            event.setEventLevel(autoLevel);
-            log.info("抛洒物分类识别: eventNo={}, category={}({}), level={}",
-                    eventNo, category.getCode(), category.getLabel(), autoLevel);
+            event.setEventLevel(category.getDefaultLevel());
+            log.info("抛洒物分类识别: eventNo={}, category={}({}), level={} (按类别默认等级)",
+                    eventNo, category.getCode(), category.getLabel(), category.getDefaultLevel());
         } else {
             event.setEventLevel(request.getEventLevel() != null ? request.getEventLevel() : 1);
         }
@@ -231,6 +229,7 @@ public class AlertEventService {
                         String.format("%04d", (int) (Math.random() * 10000)));
                 workOrder.setAlertEventId(event.getId());
                 workOrder.setEventType(event.getEventType());
+                workOrder.setDebrisCategory(event.getDebrisCategory());
                 workOrder.setOrderLevel(event.getEventLevel());
 
                 String typeText = switch (event.getEventType()) {
