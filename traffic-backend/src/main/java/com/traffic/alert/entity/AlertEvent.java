@@ -16,6 +16,8 @@ public class AlertEvent extends BaseEntity {
 
     private String eventType;
 
+    private String debrisCategory;
+
     private Integer eventLevel;
 
     private Long cameraId;

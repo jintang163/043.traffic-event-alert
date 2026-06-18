@@ -67,6 +67,7 @@ export interface AlertEvent {
   id: number;
   eventNo: string;
   eventType: 'ACCIDENT' | 'REVERSE' | 'DEBRIS' | string;
+  debrisCategory?: string;
   eventLevel: number;
   cameraId: number;
   cameraName: string;
@@ -85,6 +86,12 @@ export interface AlertEvent {
   handleTime?: string;
   handleRemark?: string;
   createTime?: string;
+}
+
+export interface DebrisCategoryOption {
+  code: string;
+  label: string;
+  defaultLevel: number;
 }
 
 export interface WorkOrder {
@@ -384,6 +391,34 @@ export const ALERT_STATUS_LABELS: Record<number, string> = {
   0: '待处理',
   1: '已处理',
   2: '误报',
+};
+
+export const DEBRIS_CATEGORY_LABELS: Record<string, string> = {
+  TIRE: '轮胎掉落',
+  CARGO: '货物掉落',
+  CARDBOARD: '纸箱',
+  ANIMAL: '动物闯入',
+  DEBRIS_BAG: '杂物袋/包裹',
+  CONSTRUCTION: '建筑材料',
+  METAL: '金属部件',
+  PLASTIC: '塑料杂物',
+  PAPER: '纸张/纸片',
+  GLASS: '玻璃碎片',
+  OTHER: '其他杂物',
+};
+
+export const DEBRIS_CATEGORY_COLORS: Record<string, string> = {
+  TIRE: 'volcano',
+  CARGO: 'red',
+  CARDBOARD: 'orange',
+  ANIMAL: 'magenta',
+  DEBRIS_BAG: 'geekblue',
+  CONSTRUCTION: 'gold',
+  METAL: 'volcano',
+  PLASTIC: 'cyan',
+  PAPER: 'default',
+  GLASS: 'purple',
+  OTHER: 'default',
 };
 
 export const ORDER_STATUS_LABELS: Record<number, string> = {

@@ -5,7 +5,9 @@ import com.traffic.alert.common.Result;
 import com.traffic.alert.dto.AlertEventQuery;
 import com.traffic.alert.dto.FalsePositiveRequest;
 import com.traffic.alert.entity.AlertEvent;
+import com.traffic.alert.enums.DebrisCategory;
 import com.traffic.alert.service.AlertEventService;
+import com.traffic.alert.service.DebrisClassificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -15,8 +17,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Tag(name = "告警事件管理")
 @RestController
@@ -25,11 +29,38 @@ import java.util.Map;
 public class AlertEventController {
 
     private final AlertEventService alertEventService;
+    private final DebrisClassificationService debrisClassificationService;
 
     @Operation(summary = "分页查询告警事件")
     @GetMapping("/page")
     public Result<PageResult<AlertEvent>> page(AlertEventQuery query) {
         return Result.success(alertEventService.page(query));
+    }
+
+    @Operation(summary = "获取抛洒物分类列表")
+    @GetMapping("/debris-categories")
+    public Result<List<Map<String, Object>>> getDebrisCategories() {
+        List<Map<String, Object>> list = Arrays.stream(DebrisCategory.values())
+                .map(c -> Map.<String, Object>of(
+                        "code", c.getCode(),
+                        "label", c.getLabel(),
+                        "defaultLevel", c.getDefaultLevel()
+                ))
+                .collect(Collectors.toList());
+        return Result.success(list);
+    }
+
+    @Operation(summary = "试算抛洒物分类和告警等级")
+    @PostMapping("/debris-classify")
+    public Result<Map<String, Object>> classifyDebris(@RequestBody Map<String, Object> payload) {
+        String className = payload.get("className") != null ? payload.get("className").toString() : null;
+        String description = payload.get("description") != null ? payload.get("description").toString() : null;
+        DebrisCategory category = debrisClassificationService.classify(className, description, payload);
+        return Result.success(Map.of(
+                "code", category.getCode(),
+                "label", category.getLabel(),
+                "defaultLevel", category.getDefaultLevel()
+        ));
     }
 
     @Operation(summary = "获取告警详情")

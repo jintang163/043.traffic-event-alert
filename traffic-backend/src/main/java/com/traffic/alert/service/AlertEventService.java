@@ -11,12 +11,14 @@ import com.traffic.alert.entity.AlertEvent;
 import com.traffic.alert.entity.Camera;
 import com.traffic.alert.entity.Department;
 import com.traffic.alert.entity.WorkOrder;
+import com.traffic.alert.enums.DebrisCategory;
 import com.traffic.alert.mapper.AlertEventMapper;
 import com.traffic.alert.websocket.AlertWebSocket;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
@@ -41,6 +43,7 @@ public class AlertEventService {
     private final NotificationService notificationService;
     private final PtzCruiseService ptzCruiseService;
     private final GlobalTrackService globalTrackService;
+    private final DebrisClassificationService debrisClassificationService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -57,6 +60,9 @@ public class AlertEventService {
         }
         if (query.getEventType() != null && !query.getEventType().isEmpty()) {
             wrapper.eq(AlertEvent::getEventType, query.getEventType());
+        }
+        if (query.getDebrisCategory() != null && !query.getDebrisCategory().isEmpty()) {
+            wrapper.eq(AlertEvent::getDebrisCategory, query.getDebrisCategory());
         }
         if (query.getEventLevel() != null) {
             wrapper.eq(AlertEvent::getEventLevel, query.getEventLevel());
@@ -96,7 +102,24 @@ public class AlertEventService {
         AlertEvent event = new AlertEvent();
         event.setEventNo(eventNo);
         event.setEventType(request.getEventType());
-        event.setEventLevel(request.getEventLevel() != null ? request.getEventLevel() : 1);
+
+        if ("DEBRIS".equals(request.getEventType())) {
+            DebrisCategory category = StringUtils.hasText(request.getDebrisCategory())
+                    ? DebrisCategory.of(request.getDebrisCategory())
+                    : debrisClassificationService.classify(
+                            request.getBbox() != null ? (String) request.getBbox().get("className") : null,
+                            request.getDescription(),
+                            request.getBbox());
+            event.setDebrisCategory(category.getCode());
+            int autoLevel = request.getEventLevel() != null
+                    ? request.getEventLevel()
+                    : category.getDefaultLevel();
+            event.setEventLevel(autoLevel);
+            log.info("抛洒物分类识别: eventNo={}, category={}({}), level={}",
+                    eventNo, category.getCode(), category.getLabel(), autoLevel);
+        } else {
+            event.setEventLevel(request.getEventLevel() != null ? request.getEventLevel() : 1);
+        }
         event.setCameraId(camera.getId());
         event.setCameraName(camera.getCameraName());
         event.setLocation(camera.getLocation());
@@ -213,7 +236,12 @@ public class AlertEventService {
                 String typeText = switch (event.getEventType()) {
                     case "ACCIDENT" -> "交通事故";
                     case "REVERSE" -> "车辆逆行";
-                    case "DEBRIS" -> "路面抛洒物";
+                    case "DEBRIS" -> {
+                        String debrisLabel = event.getDebrisCategory() != null
+                                ? DebrisCategory.of(event.getDebrisCategory()).getLabel()
+                                : "路面抛洒物";
+                        yield debrisLabel;
+                    }
                     case "INTRUSION" -> "区域入侵";
                     default -> event.getEventType();
                 };

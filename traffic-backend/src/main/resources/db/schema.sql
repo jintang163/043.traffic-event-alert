@@ -500,3 +500,6 @@ INSERT INTO rule_branch (rule_set_id, branch_code, branch_name, expression, acti
 (2, 'BRANCH_HIGH', '高级别-交警大队', "business.orderLevel == 2 || business.eventType == 'REVERSE'", 'ASSIGN', 'manager', NULL, 50, 2, NOW()),
 (2, 'BRANCH_LOW', '普通-养护队', "business.orderLevel == 1 || business.orderLevel == 0", 'ASSIGN', 'team_lead', NULL, 0, 3, NOW());
 
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS debris_category VARCHAR(32) DEFAULT NULL COMMENT '抛洒物子分类：TIRE/CARGO/CARDBOARD/ANIMAL/…' AFTER event_type;
+ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_debris_category (debris_category);
+

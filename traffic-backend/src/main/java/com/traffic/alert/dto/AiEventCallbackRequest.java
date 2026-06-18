@@ -13,6 +13,7 @@ public class AiEventCallbackRequest {
     private String eventNo;
     private Long cameraId;
     private String eventType;
+    private String debrisCategory;
     private Integer eventLevel;
     private BigDecimal confidence;
     private LocalDateTime eventTime;

@@ -96,6 +96,10 @@ export const alertApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  debrisCategories: () =>
+    request.get<any, Result<any>>('/api/alerts/debris-categories'),
+  classifyDebris: (data: { className?: string; description?: string; [k: string]: any }) =>
+    request.post<any, Result<any>>('/api/alerts/debris-classify', data),
 };
 
 export const workOrderApi = {

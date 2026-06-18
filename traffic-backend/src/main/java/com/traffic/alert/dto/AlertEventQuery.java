@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 public class AlertEventQuery extends PageQuery {
 
     private String eventType;
+    private String debrisCategory;
     private Integer eventLevel;
     private Integer alertStatus;
     private Long cameraId;

@@ -45,10 +45,13 @@ import {
   EVENT_LEVEL_LABELS,
   EVENT_LEVEL_COLORS,
   ALERT_STATUS_LABELS,
+  DEBRIS_CATEGORY_LABELS,
+  DEBRIS_CATEGORY_COLORS,
   type AlertEvent,
   type Department,
   type WorkOrder,
   type GlobalTrack,
+  type DebrisCategoryOption,
 } from '@/types';
 
 const { RangePicker } = DatePicker;
@@ -75,6 +78,7 @@ const Alerts: React.FC = () => {
   const [handleForm] = Form.useForm();
   const [orderForm] = Form.useForm();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [debrisCategories, setDebrisCategories] = useState<DebrisCategoryOption[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -114,6 +118,9 @@ const Alerts: React.FC = () => {
   useEffect(() => {
     departmentApi.list().then((res: any) => {
       if (res.code === 200) setDepartments(res.data);
+    });
+    alertApi.debrisCategories().then((res: any) => {
+      if (res.code === 200) setDebrisCategories(res.data);
     });
   }, []);
 
@@ -273,11 +280,24 @@ const Alerts: React.FC = () => {
       render: (text, record) => (
         <Tag
           icon={<WarningOutlined />}
-          color={text === 'ACCIDENT' ? 'red' : text === 'REVERSE' ? 'orange' : 'purple'}
+          color={text === 'ACCIDENT' ? 'red' : text === 'REVERSE' ? 'orange' : text === 'DEBRIS' ? 'purple' : 'blue'}
         >
           {EVENT_TYPE_LABELS[text] || text}
         </Tag>
       ),
+    },
+    {
+      title: '抛洒物子类',
+      dataIndex: 'debrisCategory',
+      width: 120,
+      render: (val: string, record: AlertEvent) => {
+        if (record.eventType !== 'DEBRIS' || !val) return <span style={{ color: '#bbb' }}>-</span>;
+        return (
+          <Tag color={DEBRIS_CATEGORY_COLORS[val] || 'default'}>
+            {DEBRIS_CATEGORY_LABELS[val] || val}
+          </Tag>
+        );
+      },
     },
     {
       title: '等级',
@@ -404,6 +424,15 @@ const Alerts: React.FC = () => {
               ))}
             </Select>
           </Form.Item>
+          <Form.Item name="debrisCategory" label="抛洒物类别">
+            <Select placeholder="全部" style={{ width: 140 }} allowClear>
+              {debrisCategories.map((c) => (
+                <Option key={c.code} value={c.code}>
+                  {c.label} (L{c.defaultLevel})
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Form.Item name="eventLevel" label="等级">
             <Select placeholder="全部" style={{ width: 100 }} allowClear>
               {Object.entries(EVENT_LEVEL_LABELS).map(([k, v]) => (
@@ -485,6 +514,13 @@ const Alerts: React.FC = () => {
                   {EVENT_TYPE_LABELS[currentAlert.eventType] || currentAlert.eventType}
                 </Tag>
               </Descriptions.Item>
+              {currentAlert.eventType === 'DEBRIS' && currentAlert.debrisCategory && (
+                <Descriptions.Item label="抛洒物类别">
+                  <Tag color={DEBRIS_CATEGORY_COLORS[currentAlert.debrisCategory] || 'default'}>
+                    {DEBRIS_CATEGORY_LABELS[currentAlert.debrisCategory] || currentAlert.debrisCategory}
+                  </Tag>
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="事件等级">
                 <Tag color={getLevelColor(currentAlert.eventLevel)} style={{ fontWeight: 600 }}>
                   {EVENT_LEVEL_LABELS[currentAlert.eventLevel]}
