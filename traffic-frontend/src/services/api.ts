@@ -204,4 +204,31 @@ export const geoFenceApi = {
     request.post<any, Result<any>>('/api/geo-fences/calculate-area', { points }),
 };
 
+export const globalTrackApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/tracks/page', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/tracks/${id}`),
+  points: (id: number) =>
+    request.get<any, Result<any>>(`/api/tracks/${id}/points`),
+  keyPoints: (id: number) =>
+    request.get<any, Result<any>>(`/api/tracks/${id}/key-points`),
+  timeline: (id: number) =>
+    request.get<any, Result<any>>(`/api/tracks/${id}/timeline`),
+  active: () =>
+    request.get<any, Result<any>>('/api/tracks/active'),
+  create: (data: any) =>
+    request.post<any, Result<any>>('/api/tracks', data),
+  update: (data: any) =>
+    request.put<any, Result<any>>('/api/tracks', data),
+  addPoint: (data: any) =>
+    request.post<any, Result<any>>('/api/tracks/point', data),
+  match: (data: any) =>
+    request.post<any, Result<any>>('/api/tracks/match', data),
+  findMatch: (data: any) =>
+    request.post<any, Result<any>>('/api/tracks/find-match', data),
+  updateStatus: (id: number, status: number) =>
+    request.post<any, Result<any>>(`/api/tracks/${id}/status`, null, { params: { status } }),
+};
+
 export default request;

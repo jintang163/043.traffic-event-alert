@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
-from app.api import detect, track, event, fence
+from app.api import detect, track, event, fence, track_cross
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -22,6 +22,7 @@ app.include_router(detect.router, prefix=settings.API_V1_PREFIX + "/detect", tag
 app.include_router(track.router, prefix=settings.API_V1_PREFIX + "/track", tags=["tracking"])
 app.include_router(event.router, prefix=settings.API_V1_PREFIX + "/event", tags=["event"])
 app.include_router(fence.router, prefix=settings.API_V1_PREFIX + "/fence", tags=["fence"])
+app.include_router(track_cross.router, prefix=settings.API_V1_PREFIX + "/track-cross", tags=["cross-camera-tracking"])
 
 
 @app.get("/health")

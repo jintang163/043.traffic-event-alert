@@ -10,6 +10,7 @@ import {
   LogoutOutlined,
   UserOutlined,
   EnvironmentOutlined,
+  CarOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -77,6 +78,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: '/geo-fences',
       icon: <EnvironmentOutlined />,
       label: '电子围栏',
+    },
+    {
+      key: '/tracks',
+      icon: <CarOutlined />,
+      label: '目标轨迹',
     },
   ];
 

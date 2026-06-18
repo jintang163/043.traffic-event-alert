@@ -158,6 +158,97 @@ export interface GeoFenceQuery extends PageQuery {
   status?: number;
 }
 
+export interface GlobalTrack {
+  id: number;
+  trackNo: string;
+  targetClass?: string;
+  licensePlate?: string;
+  plateConfidence?: number;
+  color?: string;
+  vehicleType?: string;
+  reidFeature?: string;
+  firstCameraId?: number;
+  firstCameraName?: string;
+  lastCameraId?: number;
+  lastCameraName?: string;
+  firstLongitude?: number;
+  firstLatitude?: number;
+  lastLongitude?: number;
+  lastLatitude?: number;
+  firstSeenTime?: string;
+  lastSeenTime?: string;
+  cameraCount?: number;
+  pointCount?: number;
+  totalDistance?: number;
+  avgSpeed?: number;
+  trackStatus?: number;
+  isEventTarget?: number;
+  linkedEventCount?: number;
+  snapshotUrl?: string;
+  description?: string;
+  createTime?: string;
+}
+
+export interface TrackPoint {
+  id: number;
+  trackId: number;
+  cameraId: number;
+  cameraName?: string;
+  frameNo?: number;
+  frameTime: string;
+  bboxX1?: number;
+  bboxY1?: number;
+  bboxX2?: number;
+  bboxY2?: number;
+  bboxConfidence?: number;
+  longitude?: number;
+  latitude?: number;
+  pixelX?: number;
+  pixelY?: number;
+  velocityX?: number;
+  velocityY?: number;
+  speed?: number;
+  direction?: number;
+  reidFeature?: string;
+  snapshotUrl?: string;
+  isKeyPoint?: number;
+  keyPointType?: number;
+  createTime?: string;
+}
+
+export interface GlobalTrackQuery extends PageQuery {
+  keyword?: string;
+  trackNo?: string;
+  targetClass?: string;
+  licensePlate?: string;
+  cameraId?: number;
+  trackStatus?: number;
+  isEventTarget?: number;
+  startTime?: string;
+  endTime?: string;
+}
+
+export const TRACK_STATUS_LABELS: Record<number, string> = {
+  1: '跟踪中',
+  2: '已丢失',
+  3: '已完成',
+};
+
+export const TRACK_STATUS_COLORS: Record<number, string> = {
+  1: 'processing',
+  2: 'warning',
+  3: 'default',
+};
+
+export const TARGET_CLASS_OPTIONS = [
+  { value: 'person', label: '行人' },
+  { value: 'car', label: '轿车' },
+  { value: 'truck', label: '卡车' },
+  { value: 'bus', label: '公交车' },
+  { value: 'motorcycle', label: '摩托车' },
+  { value: 'bicycle', label: '自行车' },
+];
+
 export interface Result<T> {
   code: number;
   message: string;
