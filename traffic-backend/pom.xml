@@ -26,6 +26,7 @@
         <commons-io.version>2.16.1</commons-io.version>
         <fastjson2.version>2.0.49</fastjson2.version>
         <aviator.version>5.4.1</aviator.version>
+        <influxdb.version>7.1.0</influxdb.version>
     </properties>
 
     <dependencies>
@@ -115,6 +116,12 @@
             <groupId>com.googlecode.aviator</groupId>
             <artifactId>aviator</artifactId>
             <version>${aviator.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.influxdb</groupId>
+            <artifactId>influxdb-client-java</artifactId>
+            <version>${influxdb.version}</version>
         </dependency>
 
         <dependency>

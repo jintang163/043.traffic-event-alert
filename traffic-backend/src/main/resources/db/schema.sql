@@ -507,3 +507,34 @@ INSERT INTO rule_branch (rule_set_id, branch_code, branch_name, expression, acti
 ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS debris_category VARCHAR(32) DEFAULT NULL COMMENT '抛洒物子分类：TIRE/CARGO/CARDBOARD/ANIMAL/…' AFTER event_type;
 ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_debris_category (debris_category);
 
+CREATE TABLE IF NOT EXISTS traffic_statistics (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    camera_id BIGINT,
+    camera_name VARCHAR(128),
+    road_name VARCHAR(128),
+    lane_no INT,
+    lane_name VARCHAR(32),
+    target_class VARCHAR(32),
+    stat_time DATETIME NOT NULL,
+    start_time DATETIME,
+    end_time DATETIME,
+    flow_volume INT DEFAULT 0,
+    avg_speed DECIMAL(8,2) DEFAULT 0,
+    min_speed DECIMAL(8,2) DEFAULT 0,
+    max_speed DECIMAL(8,2) DEFAULT 0,
+    speed_standard_deviation DECIMAL(8,2) DEFAULT 0,
+    occupancy DECIMAL(8,4) DEFAULT 0,
+    density DECIMAL(8,2) DEFAULT 0,
+    avg_headway DECIMAL(8,2) DEFAULT 0,
+    vehicle_count INT DEFAULT 0,
+    aggregate_type VARCHAR(16) DEFAULT 'minute',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_stat_time (stat_time),
+    INDEX idx_lane_no (lane_no),
+    INDEX idx_aggregate_type (aggregate_type),
+    UNIQUE KEY uk_cam_lane_time (camera_id, lane_no, stat_time, aggregate_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+

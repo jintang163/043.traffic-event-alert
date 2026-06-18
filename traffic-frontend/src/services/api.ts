@@ -135,6 +135,26 @@ export const departmentApi = {
 export const statisticsApi = {
   overview: () =>
     request.get<any, Result<any>>('/api/statistics/overview'),
+  trafficOverview: () =>
+    request.get<any, Result<any>>('/api/statistics/traffic/overview'),
+  trafficHistory: (params: {
+    cameraId?: number;
+    laneNo?: number;
+    startTime?: string;
+    endTime?: string;
+    aggregateType?: string;
+    useInfluxDb?: boolean;
+  }) =>
+    request.get<any, Result<any>>('/api/statistics/traffic/history', { params }),
+  trafficRealtime: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/statistics/traffic/realtime/${cameraId}`),
+  trafficAggregate: (params: {
+    cameraId?: number;
+    startTime?: string;
+    endTime?: string;
+    aggregateType?: string;
+  }) =>
+    request.post<any, Result<any>>('/api/statistics/traffic/aggregate', null, { params }),
 };
 
 export const aiApi = {

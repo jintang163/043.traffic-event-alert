@@ -555,3 +555,72 @@ export const HIT_POLICY_OPTIONS = [
   { value: 'FIRST', label: '命中首条(FIRST)' },
   { value: 'RULE_ORDER', label: '命中全部(RULE_ORDER)' },
 ];
+
+export interface TrafficStatisticsVO {
+  id?: number;
+  cameraId: number;
+  cameraName?: string;
+  roadName?: string;
+  laneNo?: number;
+  laneName?: string;
+  targetClass?: string;
+  targetClassName?: string;
+  statTime: string;
+  startTime?: string;
+  endTime?: string;
+  flowVolume?: number;
+  avgSpeed?: number;
+  minSpeed?: number;
+  maxSpeed?: number;
+  speedStandardDeviation?: number;
+  occupancy?: number;
+  density?: number;
+  avgHeadway?: number;
+  vehicleCount?: number;
+  aggregateType?: string;
+  createTime?: string;
+}
+
+export interface TrafficRealtimeVO {
+  cameraId: number;
+  cameraName?: string;
+  roadName?: string;
+  laneNo?: number;
+  laneName?: string;
+  timestamp: string;
+  flowVolume?: number;
+  avgSpeed?: number;
+  occupancy?: number;
+  density?: number;
+  level?: string;
+  levelName?: string;
+}
+
+export interface TrafficOverview {
+  totalFlow: number;
+  avgSpeed: number;
+  congestedLanes: number;
+  slowLanes: number;
+  smoothLanes: number;
+  totalLanes: number;
+  activeCameras: number;
+  realtimeList: TrafficRealtimeVO[];
+}
+
+export const TRAFFIC_LEVEL_LABELS: Record<string, string> = {
+  SMOOTH: '畅通',
+  SLOW: '缓行',
+  CONGESTED: '拥堵',
+};
+
+export const TRAFFIC_LEVEL_COLORS: Record<string, string> = {
+  SMOOTH: '#52c41a',
+  SLOW: '#faad14',
+  CONGESTED: '#ff4d4f',
+};
+
+export const AGGREGATE_TYPE_OPTIONS = [
+  { value: 'minute', label: '分钟' },
+  { value: 'hour', label: '小时' },
+  { value: 'day', label: '日' },
+];

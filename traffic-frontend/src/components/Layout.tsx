@@ -14,6 +14,7 @@ import {
   BranchesOutlined,
   TableOutlined,
   FileSearchOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -86,6 +87,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: '/tracks',
       icon: <CarOutlined />,
       label: '目标轨迹',
+    },
+    {
+      key: '/traffic-statistics',
+      icon: <LineChartOutlined />,
+      label: '交通统计',
     },
     {
       key: 'sub_rule_engine',

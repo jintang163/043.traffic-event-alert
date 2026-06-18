@@ -113,3 +113,12 @@ device:
     gb28181SipPassword: "12345678"
     gb28181MediaServer: 127.0.0.1
     gb28181MediaPort: "10000"
+
+influxdb:
+  enabled: true
+  url: http://localhost:8086
+  token: traffic-alert-token
+  org: traffic-alert
+  bucket: traffic_statistics
+  username: admin
+  password: admin12345678
