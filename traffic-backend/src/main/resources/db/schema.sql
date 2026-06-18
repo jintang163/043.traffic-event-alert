@@ -489,10 +489,14 @@ CREATE TABLE IF NOT EXISTS rule_execution_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='规则执行日志';
 
 INSERT INTO rule_set (rule_code, rule_name, gateway_type, description, status, default_branch, create_time) VALUES
-('APPROVAL_FLOW_001', '审批金额路由规则', 1, '根据金额和发起人部门决定审批路径', 1, 'BRANCH_NORMAL', NOW());
+('APPROVAL_FLOW_001', '审批金额路由规则', 1, '根据金额和发起人部门决定审批路径', 1, 'BRANCH_NORMAL', NOW()),
+('WORK_ORDER_ASSIGN', '工单分派路由规则', 1, '根据工单级别、事件类型自动分派部门', 1, 'BRANCH_LOW', NOW());
 
 INSERT INTO rule_branch (rule_set_id, branch_code, branch_name, expression, action_type, action_target, action_params, priority, sort_order, create_time) VALUES
 (1, 'BRANCH_DIRECTOR', '总监审批', "form.amount > 100000 && system.deptName == '销售部'", 'APPROVAL', 'director', NULL, 100, 1, NOW()),
 (1, 'BRANCH_MANAGER', '经理审批', "form.amount > 50000 && form.amount <= 100000", 'APPROVAL', 'manager', NULL, 50, 2, NOW()),
-(1, 'BRANCH_NORMAL', '普通审批', "form.amount <= 50000", 'APPROVAL', 'team_lead', NULL, 0, 3, NOW());
+(1, 'BRANCH_NORMAL', '普通审批', "form.amount <= 50000", 'APPROVAL', 'team_lead', NULL, 0, 3, NOW()),
+(2, 'BRANCH_URGENT', '紧急工单-总监办', "business.orderLevel >= 3 || business.eventType == 'ACCIDENT'", 'ASSIGN', 'director', NULL, 100, 1, NOW()),
+(2, 'BRANCH_HIGH', '高级别-交警大队', "business.orderLevel == 2 || business.eventType == 'REVERSE'", 'ASSIGN', 'manager', NULL, 50, 2, NOW()),
+(2, 'BRANCH_LOW', '普通-养护队', "business.orderLevel == 1 || business.orderLevel == 0", 'ASSIGN', 'team_lead', NULL, 0, 3, NOW());
 

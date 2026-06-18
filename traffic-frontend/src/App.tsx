@@ -9,6 +9,9 @@ import WorkOrders from '@/pages/WorkOrders';
 import Departments from '@/pages/Departments';
 import GeoFences from '@/pages/GeoFences';
 import Tracks from '@/pages/Tracks';
+import Rules from '@/pages/Rules';
+import DecisionTables from '@/pages/DecisionTables';
+import RuleExecutionLogs from '@/pages/RuleExecutionLogs';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -97,6 +100,30 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Tracks />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/rules"
+          element={
+            <ProtectedRoute>
+              <Rules />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/decision-tables"
+          element={
+            <ProtectedRoute>
+              <DecisionTables />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/rule-logs"
+          element={
+            <ProtectedRoute>
+              <RuleExecutionLogs />
             </ProtectedRoute>
           }
         />

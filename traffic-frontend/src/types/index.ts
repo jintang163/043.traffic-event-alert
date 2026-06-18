@@ -402,3 +402,121 @@ export const ONLINE_STATUS_LABELS: Record<number, string> = {
   0: '离线',
   1: '在线',
 };
+
+export interface RuleSet {
+  id?: number;
+  ruleCode: string;
+  ruleName: string;
+  gatewayType: number;
+  description?: string;
+  status: number;
+  defaultBranch?: string;
+  createTime?: string;
+  updateTime?: string;
+}
+
+export interface RuleBranch {
+  id?: number;
+  ruleSetId: number;
+  branchCode: string;
+  branchName: string;
+  expression: string;
+  actionType?: string;
+  actionTarget?: string;
+  actionParams?: string;
+  priority?: number;
+  sortOrder?: number;
+  createTime?: string;
+}
+
+export interface RuleExecuteRequest {
+  ruleCode?: string;
+  ruleSetId?: number;
+  formData?: Record<string, any>;
+  systemVariables?: Record<string, any>;
+  context?: Record<string, any>;
+}
+
+export interface RuleExecuteResult {
+  executionId: string;
+  ruleSetId?: number;
+  ruleCode?: string;
+  ruleName?: string;
+  gatewayType?: number;
+  gatewayTypeName?: string;
+  matchedBranches?: RuleBranch[];
+  allBranches?: RuleBranch[];
+  inputContext?: Record<string, any>;
+  executionTime?: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
+export interface RuleExecutionLog {
+  id: number;
+  executionId: string;
+  ruleSetId?: number;
+  ruleCode?: string;
+  ruleName?: string;
+  gatewayType?: number;
+  matchedBranches?: string;
+  inputContext?: string;
+  executionResult?: string;
+  executionTime?: number;
+  errorMessage?: string;
+  success: number;
+  createTime: string;
+}
+
+export interface FieldDefinition {
+  category: string;
+  field: string;
+  label: string;
+  type: string;
+  description?: string;
+  options?: Array<{ value: any; label: string }>;
+  sampleValue?: any;
+}
+
+export interface DecisionTable {
+  id?: number;
+  tableCode: string;
+  tableName: string;
+  tableData: string;
+  hitPolicy: string;
+  description?: string;
+  status: number;
+  createTime?: string;
+}
+
+export interface DecisionRule {
+  ruleIndex: number;
+  description: string;
+  conditionExpression: string;
+  actions: Record<string, any>;
+  matched?: boolean;
+}
+
+export const GATEWAY_TYPE_OPTIONS = [
+  { value: 1, label: '排他网关', color: 'blue' },
+  { value: 2, label: '并行网关', color: 'purple' },
+  { value: 3, label: '包容网关', color: 'green' },
+];
+
+export const GATEWAY_TYPE_LABELS: Record<number, string> = {
+  1: '排他网关',
+  2: '并行网关',
+  3: '包容网关',
+};
+
+export const ACTION_TYPE_OPTIONS = [
+  { value: 'APPROVAL', label: '审批' },
+  { value: 'ASSIGN', label: '分派' },
+  { value: 'NOTIFY', label: '通知' },
+  { value: 'CUSTOM', label: '自定义' },
+];
+
+export const HIT_POLICY_OPTIONS = [
+  { value: 'FIRST', label: '命中首条(FIRST)' },
+  { value: 'RULE_ORDER', label: '命中全部(RULE_ORDER)' },
+];

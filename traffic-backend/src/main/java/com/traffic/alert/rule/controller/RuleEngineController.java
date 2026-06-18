@@ -1,6 +1,7 @@
 package com.traffic.alert.rule.controller;
 
 import com.traffic.alert.common.Result;
+import com.traffic.alert.rule.context.ContextFieldSpec;
 import com.traffic.alert.rule.dto.RuleExecuteRequest;
 import com.traffic.alert.rule.dto.RuleExecuteResult;
 import com.traffic.alert.rule.entity.RuleBranch;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "规则引擎管理")
 @RestController
@@ -24,10 +26,44 @@ public class RuleEngineController {
 
     private final RuleEngineService ruleEngineService;
 
+    @Operation(summary = "获取字段定义（可视化构建器用）")
+    @GetMapping("/field-definitions")
+    public Result<List<ContextFieldSpec.FieldDefinition>> getFieldDefinitions() {
+        return Result.success(ruleEngineService.getFieldDefinitions());
+    }
+
+    @Operation(summary = "获取示例上下文数据")
+    @GetMapping("/sample-context")
+    public Result<Map<String, Object>> getSampleContext() {
+        return Result.success(ruleEngineService.getSampleContext());
+    }
+
     @Operation(summary = "执行规则")
     @PostMapping("/execute")
     public Result<RuleExecuteResult> execute(@RequestBody RuleExecuteRequest request) {
         return Result.success(ruleEngineService.execute(request));
+    }
+
+    @Operation(summary = "试算规则（不记录日志）")
+    @PostMapping("/simulate")
+    public Result<RuleExecuteResult> simulate(@RequestBody RuleExecuteRequest request) {
+        return Result.success(ruleEngineService.execute(request));
+    }
+
+    @Operation(summary = "决策表JSON转规则分支")
+    @PostMapping("/convert/decision-table")
+    public Result<List<RuleBranch>> convertDecisionTable(
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) Long ruleSetId,
+            @RequestParam(defaultValue = "true") boolean replaceExisting) {
+        String tableData = (String) body.get("tableData");
+        return Result.success(ruleEngineService.convertDecisionTableJsonToBranches(tableData, ruleSetId, replaceExisting));
+    }
+
+    @Operation(summary = "规则集列表")
+    @GetMapping("/sets")
+    public Result<List<RuleSet>> listRuleSets() {
+        return Result.success(ruleEngineService.listRuleSets());
     }
 
     @Operation(summary = "保存规则集")

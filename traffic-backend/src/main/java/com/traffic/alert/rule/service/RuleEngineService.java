@@ -2,6 +2,11 @@ package com.traffic.alert.rule.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.traffic.alert.common.BusinessException;
+import com.traffic.alert.entity.Department;
+import com.traffic.alert.entity.User;
+import com.traffic.alert.mapper.DepartmentMapper;
+import com.traffic.alert.mapper.UserMapper;
+import com.traffic.alert.rule.context.ContextFieldSpec;
 import com.traffic.alert.rule.dto.RuleExecuteRequest;
 import com.traffic.alert.rule.dto.RuleExecuteResult;
 import com.traffic.alert.rule.entity.RuleBranch;
@@ -17,7 +22,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -30,6 +37,9 @@ public class RuleEngineService {
     private final RuleBranchMapper ruleBranchMapper;
     private final RuleExecutionLogMapper ruleExecutionLogMapper;
     private final ExpressionEngineService expressionEngineService;
+    private final DecisionTableService decisionTableService;
+    private final UserMapper userMapper;
+    private final DepartmentMapper departmentMapper;
 
     @Transactional
     public RuleExecuteResult execute(RuleExecuteRequest request) {
@@ -132,14 +142,122 @@ public class RuleEngineService {
         if (request.getContext() != null) {
             context.putAll(request.getContext());
         }
+
+        Map<String, Object> system = new HashMap<>();
+        if (request.getSystemVariables() != null) {
+            system.putAll(request.getSystemVariables());
+        }
+
+        if (system.get("userId") != null) {
+            try {
+                Long userId = Long.valueOf(system.get("userId").toString());
+                User user = userMapper.selectById(userId);
+                if (user != null) {
+                    system.putIfAbsent("username", user.getUsername());
+                    system.putIfAbsent("nickname", user.getNickname());
+                    system.putIfAbsent("role", user.getRole());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (system.get("deptId") != null) {
+            try {
+                Long deptId = Long.valueOf(system.get("deptId").toString());
+                Department dept = departmentMapper.selectById(deptId);
+                if (dept != null) {
+                    system.putIfAbsent("deptCode", dept.getDeptCode());
+                    system.putIfAbsent("deptName", dept.getDeptName());
+                    system.putIfAbsent("deptType", dept.getDeptType());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (!system.containsKey("currentTime")) {
+            system.put("currentTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        }
+        context.put("system", system);
+
         if (request.getFormData() != null) {
             context.put("form", request.getFormData());
         }
-        if (request.getSystemVariables() != null) {
-            context.put("system", request.getSystemVariables());
+
+        if (request.getContext() != null && request.getContext().get("business") != null) {
+            context.put("business", request.getContext().get("business"));
+        } else {
+            context.put("business", new HashMap<String, Object>());
         }
 
         return context;
+    }
+
+    public List<ContextFieldSpec.FieldDefinition> getFieldDefinitions() {
+        return ContextFieldSpec.getAllFieldDefinitions();
+    }
+
+    public Map<String, Object> getSampleContext() {
+        return ContextFieldSpec.buildSampleContext();
+    }
+
+    @Transactional
+    public List<RuleBranch> convertDecisionTableJsonToBranches(String tableData, Long ruleSetId, boolean replaceExisting) {
+        List<DecisionTableService.DecisionRule> rules = decisionTableService.parseTable(tableData);
+
+        if (replaceExisting && ruleSetId != null) {
+            ruleBranchMapper.delete(new LambdaQueryWrapper<RuleBranch>().eq(RuleBranch::getRuleSetId, ruleSetId));
+        }
+
+        List<RuleBranch> branches = new ArrayList<>();
+        int sortOrder = 1;
+        for (DecisionTableService.DecisionRule rule : rules) {
+            RuleBranch branch = new RuleBranch();
+            branch.setRuleSetId(ruleSetId);
+            branch.setBranchCode("BRANCH_" + String.format("%03d", rule.getRuleIndex()));
+            branch.setBranchName(rule.getDescription());
+            branch.setExpression(rule.getConditionExpression());
+            branch.setPriority(BigDecimal.valueOf(rules.size() - sortOrder));
+            branch.setSortOrder(sortOrder);
+            if (rule.getActions() != null && !rule.getActions().isEmpty()) {
+                Map<String, Object> actionInfo = new HashMap<>();
+                String actionTarget = rule.getActions().keySet().stream()
+                        .filter(k -> k.equalsIgnoreCase("approver") || k.equalsIgnoreCase("target") || k.equalsIgnoreCase("role"))
+                        .findFirst()
+                        .orElse(null);
+                if (actionTarget != null) {
+                    branch.setActionTarget(String.valueOf(rule.getActions().get(actionTarget)));
+                    rule.getActions().remove(actionTarget);
+                }
+                branch.setActionType("APPROVAL");
+                if (!rule.getActions().isEmpty()) {
+                    branch.setActionParams(JSON.toJSONString(rule.getActions()));
+                }
+            }
+            if (ruleSetId != null) {
+                ruleBranchMapper.insert(branch);
+            }
+            branches.add(branch);
+            sortOrder++;
+        }
+
+        log.info("决策表转换完成: ruleSetId={}, 生成分支数={}", ruleSetId, branches.size());
+        return branches;
+    }
+
+    public RuleExecuteResult executeAndApply(String ruleCode, Map<String, Object> formData,
+                                              Map<String, Object> systemVariables, Map<String, Object> businessData) {
+        RuleExecuteRequest request = new RuleExecuteRequest();
+        request.setRuleCode(ruleCode);
+        request.setFormData(formData);
+        request.setSystemVariables(systemVariables);
+        if (businessData != null || systemVariables != null) {
+            Map<String, Object> ctx = new HashMap<>();
+            if (businessData != null) {
+                ctx.put("business", businessData);
+            }
+            request.setContext(ctx);
+        }
+        return execute(request);
     }
 
     private List<RuleBranch> evaluateBranches(GatewayType gatewayType,
@@ -273,6 +391,13 @@ public class RuleEngineService {
         }
         wrapper.orderByDesc(RuleExecutionLog::getCreateTime);
         return ruleExecutionLogMapper.selectList(wrapper);
+    }
+
+    public List<RuleSet> listRuleSets() {
+        return ruleSetMapper.selectList(
+                new LambdaQueryWrapper<RuleSet>()
+                        .orderByDesc(RuleSet::getCreateTime)
+        );
     }
 
     public RuleExecutionLog getExecutionLog(String executionId) {

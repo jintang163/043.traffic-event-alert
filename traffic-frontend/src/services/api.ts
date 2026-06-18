@@ -239,4 +239,63 @@ export const globalTrackApi = {
     request.post<any, Result<any>>('/api/tracks/link-event', data),
 };
 
+export const ruleApi = {
+  fieldDefinitions: () =>
+    request.get<any, Result<any>>('/api/rules/field-definitions'),
+  sampleContext: () =>
+    request.get<any, Result<any>>('/api/rules/sample-context'),
+  execute: (data: any) =>
+    request.post<any, Result<any>>('/api/rules/execute', data),
+  simulate: (data: any) =>
+    request.post<any, Result<any>>('/api/rules/simulate', data),
+  convertDecisionTable: (data: { tableData: string }, ruleSetId?: number, replaceExisting = true) =>
+    request.post<any, Result<any>>('/api/rules/convert/decision-table', data, { params: { ruleSetId, replaceExisting } }),
+  listSets: () =>
+    request.get<any, Result<any>>('/api/rules/sets'),
+  saveSet: (data: any) =>
+    request.post<any, Result<any>>('/api/rules/sets', data),
+  getSet: (id: number) =>
+    request.get<any, Result<any>>(`/api/rules/sets/${id}`),
+  getSetByCode: (code: string) =>
+    request.get<any, Result<any>>(`/api/rules/sets/code/${code}`),
+  deleteSet: (id: number) =>
+    request.delete<any, Result<any>>(`/api/rules/sets/${id}`),
+  getBranches: (ruleSetId: number) =>
+    request.get<any, Result<any>>(`/api/rules/sets/${ruleSetId}/branches`),
+  saveBranch: (data: any) =>
+    request.post<any, Result<any>>('/api/rules/branches', data),
+  deleteBranch: (id: number) =>
+    request.delete<any, Result<any>>(`/api/rules/branches/${id}`),
+  executionLogs: (params?: any) =>
+    request.get<any, Result<any>>('/api/rules/logs', { params }),
+  executionLog: (executionId: string) =>
+    request.get<any, Result<any>>(`/api/rules/logs/${executionId}`),
+};
+
+export const expressionApi = {
+  validate: (data: { expression: string }) =>
+    request.post<any, Result<any>>('/api/expressions/validate', data),
+  execute: (data: { expression: string; context?: Record<string, any> }) =>
+    request.post<any, Result<any>>('/api/expressions/execute', data),
+  executeBoolean: (data: { expression: string; context?: Record<string, any> }) =>
+    request.post<any, Result<any>>('/api/expressions/execute-boolean', data),
+};
+
+export const decisionTableApi = {
+  list: () =>
+    request.get<any, Result<any>>('/api/decision-tables'),
+  parse: (data: { tableData: string }) =>
+    request.post<any, Result<any>>('/api/decision-tables/parse', data),
+  evaluate: (data: any) =>
+    request.post<any, Result<any>>('/api/decision-tables/evaluate', data),
+  evaluateResult: (data: any) =>
+    request.post<any, Result<any>>('/api/decision-tables/evaluate-result', data),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/decision-tables', data),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/decision-tables/${id}`),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/decision-tables/${id}`),
+};
+
 export default request;

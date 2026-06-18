@@ -11,6 +11,9 @@ import {
   UserOutlined,
   EnvironmentOutlined,
   CarOutlined,
+  BranchesOutlined,
+  TableOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -83,6 +86,28 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: '/tracks',
       icon: <CarOutlined />,
       label: '目标轨迹',
+    },
+    {
+      key: 'sub_rule_engine',
+      icon: <BranchesOutlined />,
+      label: '规则引擎',
+      children: [
+        {
+          key: '/rules',
+          icon: <SettingOutlined />,
+          label: '规则配置',
+        },
+        {
+          key: '/decision-tables',
+          icon: <TableOutlined />,
+          label: '决策表配置',
+        },
+        {
+          key: '/rule-logs',
+          icon: <FileSearchOutlined />,
+          label: '执行日志',
+        },
+      ],
     },
   ];
 
