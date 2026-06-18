@@ -51,4 +51,22 @@ public class AlertEvent extends BaseEntity {
     private LocalDateTime handleTime;
 
     private String handleRemark;
+
+    private Integer accidentVehicles;
+
+    private Integer accidentDeformationLevel;
+
+    private Integer accidentRollover;
+
+    private Integer accidentFire;
+
+    private Integer accidentCasualty;
+
+    private BigDecimal accidentImpactSpeed;
+
+    private String accidentSeverity;
+
+    private String accidentSeverityLabel;
+
+    private Integer accidentPriority;
 }

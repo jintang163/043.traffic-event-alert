@@ -161,4 +161,11 @@ public class PtzCruiseService {
     public void resumeCruiseAfterEvent(Long cameraId) {
         ptzCruiseScheduler.resumeAfterEvent(cameraId);
     }
+
+    public void triggerMajorAccidentResponse(Long cameraId, com.traffic.alert.entity.AlertEvent event) {
+        pauseCruiseForEvent(cameraId);
+        log.info("重大事故PTZ响应已触发: cameraId={}, eventNo={}, severity={}",
+                cameraId, event != null ? event.getEventNo() : null,
+                event != null ? event.getAccidentSeverity() : null);
+    }
 }

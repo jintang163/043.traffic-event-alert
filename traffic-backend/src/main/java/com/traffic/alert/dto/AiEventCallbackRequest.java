@@ -22,4 +22,12 @@ public class AiEventCallbackRequest {
     private String eventVideo;
     private List<Map<String, Object>> trackData;
     private Map<String, Object> bbox;
+
+    private Integer accidentVehicles;
+    private Integer accidentDeformationLevel;
+    private Integer accidentRollover;
+    private Integer accidentFire;
+    private Integer accidentCasualty;
+    private BigDecimal accidentImpactSpeed;
+    private String accidentSeverity;
 }

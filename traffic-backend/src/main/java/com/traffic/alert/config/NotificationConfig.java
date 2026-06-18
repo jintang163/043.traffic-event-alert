@@ -31,6 +31,7 @@ public class NotificationConfig {
         private String apiUrl;
         private String apiKey;
         private String templateId;
+        private String emergencyTemplateId;
         private boolean enabled = false;
     }
 }

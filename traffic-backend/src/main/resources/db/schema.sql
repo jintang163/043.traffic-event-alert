@@ -507,6 +507,17 @@ INSERT INTO rule_branch (rule_set_id, branch_code, branch_name, expression, acti
 ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS debris_category VARCHAR(32) DEFAULT NULL COMMENT '抛洒物子分类：TIRE/CARGO/CARDBOARD/ANIMAL/…' AFTER event_type;
 ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_debris_category (debris_category);
 
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_vehicles INT DEFAULT NULL COMMENT '事故涉事车辆数' AFTER handle_remark;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_deformation_level INT DEFAULT NULL COMMENT '事故变形程度(0-4)' AFTER accident_vehicles;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_rollover INT DEFAULT NULL COMMENT '是否翻滚(0否1是)' AFTER accident_deformation_level;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_fire INT DEFAULT NULL COMMENT '是否起火(0否1是)' AFTER accident_rollover;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_casualty INT DEFAULT NULL COMMENT '伤亡人数' AFTER accident_fire;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_impact_speed DECIMAL(8,2) DEFAULT NULL COMMENT '碰撞车速km/h' AFTER accident_casualty;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_severity VARCHAR(16) DEFAULT NULL COMMENT '事故严重程度:SLIGHT/GENERAL/MAJOR' AFTER accident_impact_speed;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_severity_label VARCHAR(32) DEFAULT NULL COMMENT '事故严重程度标签' AFTER accident_severity;
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_priority INT DEFAULT NULL COMMENT '事故响应优先级' AFTER accident_severity_label;
+ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_accident_severity (accident_severity);
+
 CREATE TABLE IF NOT EXISTS traffic_statistics (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     camera_id BIGINT,

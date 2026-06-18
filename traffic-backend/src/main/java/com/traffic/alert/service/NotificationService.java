@@ -28,19 +28,39 @@ public class NotificationService {
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public void sendAlertNotification(AlertEvent alert) {
-        String content = buildAlertContent(alert);
-        if (notificationConfig.getDingTalk().isEnabled()) {
-            sendDingTalkNotification(content);
-        }
-        if (notificationConfig.getWeChat().isEnabled()) {
-            sendWeChatNotification(content);
-        }
-        if (notificationConfig.getSms().isEnabled()) {
-            sendSmsNotification(alert, content);
+        sendAlertNotification(alert, false);
+    }
+
+    public void sendAlertNotification(AlertEvent alert, boolean isMajor) {
+        String content = buildAlertContent(alert, isMajor);
+        if (isMajor) {
+            if (notificationConfig.getDingTalk().isEnabled()) {
+                sendDingTalkNotification(content, true);
+            }
+            if (notificationConfig.getWeChat().isEnabled()) {
+                sendWeChatNotification(content, true);
+            }
+            if (notificationConfig.getSms().isEnabled()) {
+                sendSmsNotification(alert, content, true);
+            }
+        } else {
+            if (notificationConfig.getDingTalk().isEnabled()) {
+                sendDingTalkNotification(content);
+            }
+            if (notificationConfig.getWeChat().isEnabled()) {
+                sendWeChatNotification(content);
+            }
+            if (notificationConfig.getSms().isEnabled()) {
+                sendSmsNotification(alert, content);
+            }
         }
     }
 
     private String buildAlertContent(AlertEvent alert) {
+        return buildAlertContent(alert, false);
+    }
+
+    private String buildAlertContent(AlertEvent alert, boolean isMajor) {
         String levelText = switch (alert.getEventLevel()) {
             case 3 -> "【紧急】";
             case 2 -> "【严重】";
@@ -66,16 +86,42 @@ public class NotificationService {
                     dc.getLabel(), dc.getCode(), dc.getDefaultLevel());
         }
 
-        return String.format("%s 交通事件告警\n" +
+        String severityLine = "";
+        if ("ACCIDENT".equals(alert.getEventType()) && alert.getAccidentSeverity() != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("事故等级: %s%n", alert.getAccidentSeverityLabel()));
+            if (alert.getAccidentVehicles() != null) {
+                sb.append(String.format("涉事车辆: %d辆%n", alert.getAccidentVehicles()));
+            }
+            if (alert.getAccidentRollover() != null && alert.getAccidentRollover() == 1) {
+                sb.append("特征: 车辆翻滚\n");
+            }
+            if (alert.getAccidentFire() != null && alert.getAccidentFire() == 1) {
+                sb.append("特征: 车辆起火\n");
+            }
+            if (alert.getAccidentCasualty() != null && alert.getAccidentCasualty() > 0) {
+                sb.append(String.format("人员伤亡: %d人%n", alert.getAccidentCasualty()));
+            }
+            if (alert.getAccidentImpactSpeed() != null) {
+                sb.append(String.format("碰撞车速: %.1f km/h%n", alert.getAccidentImpactSpeed()));
+            }
+            severityLine = sb.toString();
+        }
+
+        String majorPrefix = isMajor ? "🚨 重大事故紧急告警\n" : "";
+
+        return String.format("%s%s 交通事件告警\n" +
                         "事件类型: %s\n" +
+                        "%s" +
                         "%s" +
                         "摄像头: %s\n" +
                         "位置: %s\n" +
                         "时间: %s\n" +
                         "置信度: %.2f%%\n" +
                         "描述: %s",
-                levelText, typeText,
+                majorPrefix, levelText, typeText,
                 categoryLine,
+                severityLine,
                 alert.getCameraName(),
                 alert.getLocation(),
                 alert.getEventTime(),
@@ -85,6 +131,10 @@ public class NotificationService {
     }
 
     private void sendDingTalkNotification(String content) {
+        sendDingTalkNotification(content, false);
+    }
+
+    private void sendDingTalkNotification(String content, boolean isMajor) {
         try {
             NotificationConfig.DingTalk config = notificationConfig.getDingTalk();
             long timestamp = Instant.now().toEpochMilli();
@@ -92,7 +142,11 @@ public class NotificationService {
 
             String url = config.getWebhook() + "&timestamp=" + timestamp + "&sign=" + sign;
 
-            Map<String, Object> body = Map.of(
+            Map<String, Object> body = isMajor ? Map.of(
+                    "msgtype", "text",
+                    "text", Map.of("content", content),
+                    "at", Map.of("isAtAll", true)
+            ) : Map.of(
                     "msgtype", "text",
                     "text", Map.of("content", content)
             );
@@ -119,13 +173,19 @@ public class NotificationService {
     }
 
     private void sendWeChatNotification(String content) {
+        sendWeChatNotification(content, false);
+    }
+
+    private void sendWeChatNotification(String content, boolean isMajor) {
         try {
             NotificationConfig.WeChat config = notificationConfig.getWeChat();
+
+            String finalContent = isMajor ? "<font color=\"warning\">🚨 重大事故紧急告警</font>\n\n" + content : content;
 
             Map<String, Object> body = Map.of(
                     "msgtype", "markdown",
                     "markdown", Map.of(
-                            "content", content
+                            "content", finalContent
                     )
             );
 
@@ -143,13 +203,20 @@ public class NotificationService {
     }
 
     private void sendSmsNotification(AlertEvent alert, String content) {
+        sendSmsNotification(alert, content, false);
+    }
+
+    private void sendSmsNotification(AlertEvent alert, String content, boolean isMajor) {
         try {
             NotificationConfig.Sms config = notificationConfig.getSms();
 
+            String finalContent = isMajor ? "[重大事故] " + content : content;
+
             Map<String, Object> body = Map.of(
                     "apiKey", config.getApiKey(),
-                    "templateId", config.getTemplateId(),
-                    "content", content
+                    "templateId", isMajor && config.getEmergencyTemplateId() != null
+                            ? config.getEmergencyTemplateId() : config.getTemplateId(),
+                    "content", finalContent
             );
 
             HttpRequest request = HttpRequest.newBuilder()

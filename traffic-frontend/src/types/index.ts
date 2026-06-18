@@ -86,7 +86,30 @@ export interface AlertEvent {
   handleTime?: string;
   handleRemark?: string;
   createTime?: string;
+  accidentVehicles?: number;
+  accidentDeformationLevel?: number;
+  accidentRollover?: number;
+  accidentFire?: number;
+  accidentCasualty?: number;
+  accidentImpactSpeed?: number;
+  accidentSeverity?: 'SLIGHT' | 'GENERAL' | 'MAJOR' | string;
+  accidentSeverityLabel?: string;
+  accidentPriority?: number;
 }
+
+export const ACCIDENT_SEVERITY_OPTIONS = [
+  { value: 'SLIGHT', label: '轻微事故', color: '#52c41a', priority: 1 },
+  { value: 'GENERAL', label: '一般事故', color: '#faad14', priority: 2 },
+  { value: 'MAJOR', label: '重大事故', color: '#ff4d4f', priority: 3 },
+];
+
+export const ACCIDENT_DEFORMATION_LEVELS = [
+  { value: 0, label: '无变形' },
+  { value: 1, label: '轻微变形' },
+  { value: 2, label: '中度变形' },
+  { value: 3, label: '重度变形' },
+  { value: 4, label: '严重报废' },
+];
 
 export interface DebrisCategoryOption {
   code: string;

@@ -44,6 +44,7 @@ public class AlertEventService {
     private final PtzCruiseService ptzCruiseService;
     private final GlobalTrackService globalTrackService;
     private final DebrisClassificationService debrisClassificationService;
+    private final AccidentSeverityService accidentSeverityService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -64,6 +65,9 @@ public class AlertEventService {
         if (query.getDebrisCategory() != null && !query.getDebrisCategory().isEmpty()) {
             wrapper.eq(AlertEvent::getDebrisCategory, query.getDebrisCategory());
         }
+        if (query.getAccidentSeverity() != null && !query.getAccidentSeverity().isEmpty()) {
+            wrapper.eq(AlertEvent::getAccidentSeverity, query.getAccidentSeverity());
+        }
         if (query.getEventLevel() != null) {
             wrapper.eq(AlertEvent::getEventLevel, query.getEventLevel());
         }
@@ -82,9 +86,10 @@ public class AlertEventService {
         if (query.getIsFalsePositive() != null) {
             wrapper.eq(AlertEvent::getIsFalsePositive, query.getIsFalsePositive());
         }
-        wrapper.orderByDesc(AlertEvent::getEventTime);
+        wrapper.orderByDesc(AlertEvent::getAccidentPriority)
+                .orderByDesc(AlertEvent::getEventTime);
         alertEventMapper.selectPage(page, wrapper);
-        return PageResult.of(page.getTotal(), page.getRecords(), page.getCurrent(), page.getSize());
+        return PageResult.of(page.getTotal(), page.getRecords(), page.getCurrent(), query.getSize());
     }
 
     @Transactional
@@ -150,20 +155,49 @@ public class AlertEventService {
             }
         }
 
-        alertEventMapper.insert(event);
-        log.info("创建交通告警事件: eventNo={}, type={}, camera={}",
-                eventNo, request.getEventType(), camera.getCameraName());
+        if ("ACCIDENT".equals(event.getEventType())) {
+            try {
+                accidentSeverityService.evaluate(event, request);
+                log.info("交通事故严重程度评估: eventNo={}, severity={}({}), priority={}",
+                        eventNo, event.getAccidentSeverity(), event.getAccidentSeverityLabel(), event.getAccidentPriority());
+            } catch (Exception e) {
+                log.warn("事故严重程度评估失败，事件仍按默认处理: eventNo={}, error={}", eventNo, e.getMessage());
+            }
+        }
 
-        AlertWebSocket.sendAlertMessage(event);
-        notificationService.sendAlertNotification(event);
+        alertEventMapper.insert(event);
+        log.info("创建交通告警事件: eventNo={}, type={}, camera={}, level={}",
+                eventNo, request.getEventType(), camera.getCameraName(), event.getEventLevel());
+
+        boolean isMajorAccident = accidentSeverityService.isMajorAccident(event);
+
+        AlertWebSocket.sendAlertMessage(event, isMajorAccident);
+        notificationService.sendAlertNotification(event, isMajorAccident);
+
+        if (isMajorAccident) {
+            log.warn("===== 重大事故优先响应开始 =====");
+        }
 
         if (event.getEventLevel() != null && event.getEventLevel() >= 2) {
             ptzCruiseService.pauseCruiseForEvent(camera.getId());
             log.info("事件联动暂停巡航: cameraId={}, eventNo={}", camera.getId(), eventNo);
         }
 
+        if (isMajorAccident) {
+            try {
+                ptzCruiseService.triggerMajorAccidentResponse(camera.getId(), event);
+                log.info("重大事故专用PTZ响应已触发: cameraId={}, eventNo={}", camera.getId(), eventNo);
+            } catch (Exception e) {
+                log.warn("重大事故PTZ响应失败: eventNo={}, error={}", eventNo, e.getMessage());
+            }
+        }
+
         if (event.getEventLevel() != null && event.getEventLevel() >= 2) {
-            autoCreateWorkOrder(event);
+            autoCreateWorkOrder(event, isMajorAccident);
+        }
+
+        if (isMajorAccident) {
+            log.warn("===== 重大事故优先响应完成: eventNo={} =====", eventNo);
         }
 
         if (request.getTrackData() != null && !request.getTrackData().isEmpty()) {
@@ -217,10 +251,14 @@ public class AlertEventService {
     }
 
     private void autoCreateWorkOrder(AlertEvent event) {
+        autoCreateWorkOrder(event, false);
+    }
+
+    private void autoCreateWorkOrder(AlertEvent event, boolean isMajor) {
         try {
+            int deptType = "ACCIDENT".equals(event.getEventType()) ? (isMajor ? 3 : 2) : 1;
             Department nearestDept = departmentService.findNearestDepartment(
-                    event.getLongitude(), event.getLatitude(),
-                    "ACCIDENT".equals(event.getEventType()) ? 2 : 1
+                    event.getLongitude(), event.getLatitude(), deptType
             );
 
             if (nearestDept != null) {
@@ -233,7 +271,12 @@ public class AlertEventService {
                 workOrder.setOrderLevel(event.getEventLevel());
 
                 String typeText = switch (event.getEventType()) {
-                    case "ACCIDENT" -> "交通事故";
+                    case "ACCIDENT" -> {
+                        if (event.getAccidentSeverityLabel() != null) {
+                            yield event.getAccidentSeverityLabel();
+                        }
+                        yield "交通事故";
+                    }
                     case "REVERSE" -> "车辆逆行";
                     case "DEBRIS" -> {
                         String debrisLabel = event.getDebrisCategory() != null
@@ -244,16 +287,45 @@ public class AlertEventService {
                     case "INTRUSION" -> "区域入侵";
                     default -> event.getEventType();
                 };
-                workOrder.setTitle(typeText + "处置工单 - " + event.getCameraName());
-                workOrder.setDescription(event.getDescription());
+                String majorPrefix = isMajor ? "【紧急】" : "";
+                workOrder.setTitle(majorPrefix + typeText + "处置工单 - " + event.getCameraName());
+
+                StringBuilder desc = new StringBuilder();
+                if (event.getDescription() != null) desc.append(event.getDescription());
+                if ("ACCIDENT".equals(event.getEventType()) && event.getAccidentSeverity() != null) {
+                    desc.append("\n\n【事故特征】");
+                    desc.append("\n事故等级: ").append(event.getAccidentSeverityLabel());
+                    if (event.getAccidentVehicles() != null) {
+                        desc.append("\n涉事车辆: ").append(event.getAccidentVehicles()).append("辆");
+                    }
+                    if (event.getAccidentDeformationLevel() != null) {
+                        String[] defLv = {"无变形", "轻微变形", "中度变形", "重度变形", "严重报废"};
+                        int lv = Math.max(0, Math.min(defLv.length - 1, event.getAccidentDeformationLevel()));
+                        desc.append("\n变形程度: ").append(defLv[lv]);
+                    }
+                    if (event.getAccidentRollover() != null && event.getAccidentRollover() == 1) {
+                        desc.append("\n是否翻滚: 是");
+                    }
+                    if (event.getAccidentFire() != null && event.getAccidentFire() == 1) {
+                        desc.append("\n是否起火: 是");
+                    }
+                    if (event.getAccidentCasualty() != null && event.getAccidentCasualty() > 0) {
+                        desc.append("\n人员伤亡: ").append(event.getAccidentCasualty()).append("人");
+                    }
+                    if (event.getAccidentImpactSpeed() != null) {
+                        desc.append("\n碰撞车速: ").append(event.getAccidentImpactSpeed()).append(" km/h");
+                    }
+                }
+                workOrder.setDescription(desc.toString());
                 workOrder.setAssignDeptId(nearestDept.getId());
                 workOrder.setAssignDeptName(nearestDept.getDeptName());
                 workOrder.setOrderStatus(0);
                 workOrder.setPlanStartTime(LocalDateTime.now());
-                workOrder.setPlanEndTime(LocalDateTime.now().plusHours(2));
+                workOrder.setPlanEndTime(LocalDateTime.now().plusHours(isMajor ? 1 : 2));
 
                 workOrderService.save(workOrder);
-                log.info("自动生成工单: orderNo={}, dept={}", workOrder.getOrderNo(), nearestDept.getDeptName());
+                log.info("自动生成工单: orderNo={}, dept={}, isMajor={}",
+                        workOrder.getOrderNo(), nearestDept.getDeptName(), isMajor);
             }
         } catch (Exception e) {
             log.error("自动生成工单失败: {}", e.getMessage());

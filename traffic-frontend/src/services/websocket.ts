@@ -61,6 +61,7 @@ class WebSocketService {
   private userId: number | null = null;
   private messageHandlers: Set<MessageHandler> = new Set();
   private alertHandlers: Set<AlertHandler> = new Set();
+  private majorAlertHandlers: Set<AlertHandler> = new Set();
   private detectionHandlers: Map<number, Set<DetectionHandler>> = new Map();
   private subscribedCameras: Set<number> = new Set();
   private reconnectTimer: number | null = null;
@@ -180,6 +181,23 @@ class WebSocketService {
         });
       }
 
+      if (message.type === 'MAJOR_ALERT' && message.data) {
+        this.alertHandlers.forEach((handler) => {
+          try {
+            handler(message.data as WsAlertEvent);
+          } catch (e) {
+            console.error('[WS] Alert handler error:', e);
+          }
+        });
+        this.majorAlertHandlers.forEach((handler) => {
+          try {
+            handler(message.data as WsAlertEvent);
+          } catch (e) {
+            console.error('[WS] Major alert handler error:', e);
+          }
+        });
+      }
+
       if (message.type === 'DETECTION' && message.cameraId !== undefined && message.data) {
         const camId = message.cameraId;
         const handlers = this.detectionHandlers.get(camId);
@@ -278,6 +296,11 @@ class WebSocketService {
   onAlert(handler: AlertHandler) {
     this.alertHandlers.add(handler);
     return () => this.alertHandlers.delete(handler);
+  }
+
+  onMajorAlert(handler: AlertHandler) {
+    this.majorAlertHandlers.add(handler);
+    return () => this.majorAlertHandlers.delete(handler);
   }
 
   isConnected() {

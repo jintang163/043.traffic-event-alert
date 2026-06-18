@@ -93,11 +93,16 @@ public class AlertWebSocket {
     }
 
     public static void sendAlertMessage(Object alertData) {
-        String message = JSON.toJSONString(java.util.Map.of(
-                "type", "ALERT",
-                "data", alertData,
-                "timestamp", System.currentTimeMillis()
-        ));
+        sendAlertMessage(alertData, false);
+    }
+
+    public static void sendAlertMessage(Object alertData, boolean isMajor) {
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("type", isMajor ? "MAJOR_ALERT" : "ALERT");
+        payload.put("data", alertData);
+        payload.put("timestamp", System.currentTimeMillis());
+        payload.put("major", isMajor);
+        String message = JSON.toJSONString(payload);
         broadcastMessage(message);
     }
 

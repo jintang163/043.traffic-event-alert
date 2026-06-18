@@ -47,6 +47,8 @@ import {
   ALERT_STATUS_LABELS,
   DEBRIS_CATEGORY_LABELS,
   DEBRIS_CATEGORY_COLORS,
+  ACCIDENT_SEVERITY_OPTIONS,
+  ACCIDENT_DEFORMATION_LEVELS,
   type AlertEvent,
   type Department,
   type WorkOrder,
@@ -247,13 +249,29 @@ const Alerts: React.FC = () => {
     return colors[status] || 'default';
   };
 
+  const getAccidentSeverityColor = (severity?: string) => {
+    const opt = ACCIDENT_SEVERITY_OPTIONS.find((s) => s.value === severity);
+    return opt?.color || '#d9d9d9';
+  };
+
+  const getAccidentSeverityLabel = (severity?: string) => {
+    const opt = ACCIDENT_SEVERITY_OPTIONS.find((s) => s.value === severity);
+    return opt?.label || '-';
+  };
+
+  const getDeformationLabel = (lv?: number) => {
+    const opt = ACCIDENT_DEFORMATION_LEVELS.find((d) => d.value === lv);
+    return opt?.label || '-';
+  };
+
   const getAlertStats = () => {
     const today = new Date().toDateString();
     const todayAlerts = data.filter((a) => new Date(a.eventTime).toDateString() === today);
     const pending = data.filter((a) => a.alertStatus === 0);
     const accident = data.filter((a) => a.eventType === 'ACCIDENT');
+    const major = data.filter((a) => a.accidentSeverity === 'MAJOR');
     const debris = data.filter((a) => a.eventType === 'DEBRIS');
-    return { today: todayAlerts.length, pending: pending.length, accident: accident.length, debris: debris.length };
+    return { today: todayAlerts.length, pending: pending.length, accident: accident.length, major: major.length, debris: debris.length };
   };
 
   const stats = getAlertStats();
@@ -295,6 +313,27 @@ const Alerts: React.FC = () => {
         return (
           <Tag color={DEBRIS_CATEGORY_COLORS[val] || 'default'}>
             {DEBRIS_CATEGORY_LABELS[val] || val}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '事故严重程度',
+      dataIndex: 'accidentSeverity',
+      width: 110,
+      align: 'center',
+      render: (val: string, record: AlertEvent) => {
+        if (record.eventType !== 'ACCIDENT' || !val) return <span style={{ color: '#bbb' }}>-</span>;
+        return (
+          <Tag
+            color={getAccidentSeverityColor(val)}
+            style={{
+              fontWeight: val === 'MAJOR' ? 700 : 600,
+              border: val === 'MAJOR' ? '1px solid #ff4d4f' : undefined,
+            }}
+          >
+            {val === 'MAJOR' && '🚨 '}
+            {record.accidentSeverityLabel || getAccidentSeverityLabel(val)}
           </Tag>
         );
       },
@@ -390,22 +429,31 @@ const Alerts: React.FC = () => {
   return (
     <div>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={12} md={6}>
+        <Col xs={12} sm={12} md={4}>
           <Card size="small" style={{ borderRadius: 8 }}>
             <Statistic title="今日告警" value={stats.today} valueStyle={{ color: '#ff4d4f' }} />
           </Card>
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} sm={12} md={4}>
           <Card size="small" style={{ borderRadius: 8 }}>
             <Statistic title="待处理" value={stats.pending} valueStyle={{ color: '#fa8c16' }} />
           </Card>
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} sm={12} md={4}>
           <Card size="small" style={{ borderRadius: 8 }}>
             <Statistic title="事故类" value={stats.accident} />
           </Card>
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} sm={12} md={4}>
+          <Card size="small" style={{ borderRadius: 8, background: 'linear-gradient(135deg,#fff1f0,#ffa39e)' }}>
+            <Statistic
+              title="🚨 重大事故"
+              value={stats.major}
+              valueStyle={{ color: '#ff4d4f', fontWeight: 700 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={12} md={4}>
           <Card size="small" style={{ borderRadius: 8 }}>
             <Statistic title="抛洒物" value={stats.debris} />
           </Card>
@@ -540,6 +588,64 @@ const Alerts: React.FC = () => {
               <Descriptions.Item label="描述" span={2}>
                 {currentAlert.description || '-'}
               </Descriptions.Item>
+              {currentAlert.eventType === 'ACCIDENT' && (
+                <>
+                  <Descriptions.Item label="事故严重程度">
+                    {currentAlert.accidentSeverity ? (
+                      <Tag
+                        color={getAccidentSeverityColor(currentAlert.accidentSeverity)}
+                        style={{ fontWeight: currentAlert.accidentSeverity === 'MAJOR' ? 700 : 600 }}
+                      >
+                        {currentAlert.accidentSeverity === 'MAJOR' && '🚨 '}
+                        {currentAlert.accidentSeverityLabel || getAccidentSeverityLabel(currentAlert.accidentSeverity)}
+                      </Tag>
+                    ) : (
+                      <span style={{ color: '#bbb' }}>-</span>
+                    )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="优先级">
+                    {currentAlert.accidentPriority != null ? `P${currentAlert.accidentPriority}` : '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="涉事车辆">
+                    {currentAlert.accidentVehicles != null ? `${currentAlert.accidentVehicles} 辆` : '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="变形程度">
+                    {currentAlert.accidentDeformationLevel != null
+                      ? getDeformationLabel(currentAlert.accidentDeformationLevel)
+                      : '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="是否翻滚">
+                    {currentAlert.accidentRollover === 1 ? (
+                      <Tag color="red">是</Tag>
+                    ) : currentAlert.accidentRollover === 0 ? (
+                      <Tag color="green">否</Tag>
+                    ) : (
+                      '-'
+                    )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="是否起火">
+                    {currentAlert.accidentFire === 1 ? (
+                      <Tag color="red">是</Tag>
+                    ) : currentAlert.accidentFire === 0 ? (
+                      <Tag color="green">否</Tag>
+                    ) : (
+                      '-'
+                    )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="人员伤亡">
+                    {currentAlert.accidentCasualty != null && currentAlert.accidentCasualty > 0
+                      ? <Tag color="red">{currentAlert.accidentCasualty} 人</Tag>
+                      : currentAlert.accidentCasualty === 0
+                        ? <Tag color="green">0 人</Tag>
+                        : '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="碰撞车速">
+                    {currentAlert.accidentImpactSpeed != null
+                      ? `${currentAlert.accidentImpactSpeed.toFixed(1)} km/h`
+                      : '-'}
+                  </Descriptions.Item>
+                </>
+              )}
               {currentAlert.isFalsePositive === 1 && (
                 <Descriptions.Item label="误报原因" span={2}>
                   {currentAlert.falsePositiveReason || '-'}
