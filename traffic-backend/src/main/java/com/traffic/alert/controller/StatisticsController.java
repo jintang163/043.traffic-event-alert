@@ -1,6 +1,7 @@
 package com.traffic.alert.controller;
 
 import com.traffic.alert.common.Result;
+import com.traffic.alert.config.InfluxDBConfig;
 import com.traffic.alert.dto.TrafficStatisticsQuery;
 import com.traffic.alert.service.AlertEventService;
 import com.traffic.alert.service.CameraService;
@@ -30,6 +31,7 @@ public class StatisticsController {
     private final AlertEventService alertEventService;
     private final WorkOrderService workOrderService;
     private final TrafficStatisticsService trafficStatisticsService;
+    private final InfluxDBConfig influxDBConfig;
 
     @Operation(summary = "获取总览统计")
     @GetMapping("/overview")
@@ -39,6 +41,16 @@ public class StatisticsController {
         result.put("alert", alertEventService.getStatistics());
         result.put("workOrder", workOrderService.getStatistics());
         return Result.success(result);
+    }
+
+    @Operation(summary = "检查InfluxDB可用性")
+    @GetMapping("/traffic/influxdb-status")
+    public Result<Map<String, Object>> getInfluxDbStatus() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("enabled", influxDBConfig.isEnabled());
+        status.put("available", trafficStatisticsService.isInfluxDbAvailable());
+        status.put("url", influxDBConfig.getUrl());
+        return Result.success(status);
     }
 
     @Operation(summary = "获取交通态势总览")
@@ -57,7 +69,7 @@ public class StatisticsController {
             @Parameter(description = "结束时间") @RequestParam(required = false)
                 @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTime,
             @Parameter(description = "聚合类型: minute/hour/day") @RequestParam(defaultValue = "minute") String aggregateType,
-            @Parameter(description = "是否从InfluxDB查询") @RequestParam(defaultValue = "false") Boolean useInfluxDb) {
+            @Parameter(description = "数据源: mysql/influxdb") @RequestParam(defaultValue = "mysql") String dataSource) {
 
         TrafficStatisticsQuery query = new TrafficStatisticsQuery();
         query.setCameraId(cameraId);
@@ -67,7 +79,7 @@ public class StatisticsController {
         query.setAggregateType(aggregateType);
 
         List<TrafficStatisticsVO> result;
-        if (Boolean.TRUE.equals(useInfluxDb)) {
+        if ("influxdb".equalsIgnoreCase(dataSource) && trafficStatisticsService.isInfluxDbAvailable()) {
             result = trafficStatisticsService.queryFromInfluxDB(query);
         } else {
             result = trafficStatisticsService.queryStatistics(query);

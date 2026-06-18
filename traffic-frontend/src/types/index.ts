@@ -611,12 +611,14 @@ export const TRAFFIC_LEVEL_LABELS: Record<string, string> = {
   SMOOTH: '畅通',
   SLOW: '缓行',
   CONGESTED: '拥堵',
+  NO_DATA: '无数据',
 };
 
 export const TRAFFIC_LEVEL_COLORS: Record<string, string> = {
   SMOOTH: '#52c41a',
   SLOW: '#faad14',
   CONGESTED: '#ff4d4f',
+  NO_DATA: '#d9d9d9',
 };
 
 export const AGGREGATE_TYPE_OPTIONS = [

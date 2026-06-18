@@ -16,6 +16,7 @@ import com.traffic.alert.mapper.TrackMatchLogMapper;
 import com.traffic.alert.mapper.TrackPointMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,8 @@ public class GlobalTrackService {
     private final TrackMatchLogMapper trackMatchLogMapper;
     private final EventTrackLinkMapper eventTrackLinkMapper;
     private final CameraService cameraService;
+    @Lazy
+    private final TrafficStatisticsService trafficStatisticsService;
 
     private static final DateTimeFormatter TRACK_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final double PLATE_MATCH_THRESHOLD = 0.90;
@@ -153,6 +156,13 @@ public class GlobalTrackService {
             track.setLastCameraName(point.getCameraName());
             globalTrackMapper.updateById(track);
         }
+
+        try {
+            trafficStatisticsService.processTrackPoint(point, track);
+        } catch (Exception e) {
+            log.warn("Process track point for statistics failed: {}", e.getMessage());
+        }
+
         return point;
     }
 
@@ -376,9 +386,11 @@ public class GlobalTrackService {
             }
         }
 
+        Map<Long, GlobalTrack> trackCache = new HashMap<>();
         for (Long trackId : trackIds) {
             GlobalTrack track = getById(trackId);
             if (track != null) {
+                trackCache.put(trackId, track);
                 long count = points.stream().filter(p -> trackId.equals(p.getTrackId())).count();
                 track.setPointCount((track.getPointCount() == null ? 0 : track.getPointCount()) + (int) count);
 
@@ -405,6 +417,15 @@ public class GlobalTrackService {
                 }
 
                 globalTrackMapper.updateById(track);
+            }
+        }
+
+        for (TrackPoint p : points) {
+            try {
+                GlobalTrack track = p.getTrackId() != null ? trackCache.get(p.getTrackId()) : null;
+                trafficStatisticsService.processTrackPoint(p, track);
+            } catch (Exception e) {
+                log.warn("Process track point for statistics failed in batch: {}", e.getMessage());
             }
         }
 

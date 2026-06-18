@@ -15,6 +15,8 @@ import {
   message,
   Spin,
   Empty,
+  Switch,
+  Tooltip,
 } from 'antd';
 import {
   CarOutlined,
@@ -24,6 +26,8 @@ import {
   PlayCircleOutlined,
   LineChartOutlined,
   TableOutlined,
+  DatabaseOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import { Line, Column } from '@ant-design/charts';
 import type { Dayjs } from 'dayjs';
@@ -46,6 +50,8 @@ const TrafficStatistics: React.FC = () => {
   const [historyData, setHistoryData] = useState<TrafficStatisticsVO[]>([]);
   const [realtimeData, setRealtimeData] = useState<TrafficRealtimeVO[]>([]);
   const [activeTab, setActiveTab] = useState('chart');
+  const [influxDbAvailable, setInfluxDbAvailable] = useState(false);
+  const [useInfluxDb, setUseInfluxDb] = useState(false);
   const realtimeTimerRef = useRef<number | null>(null);
 
   const loadCameras = async () => {
@@ -56,6 +62,21 @@ const TrafficStatistics: React.FC = () => {
       }
     } catch (e) {
       console.error('Load cameras failed:', e);
+    }
+  };
+
+  const checkInfluxDb = async () => {
+    try {
+      const res: any = await statisticsApi.influxDbStatus();
+      if (res.code === 200 && res.data) {
+        setInfluxDbAvailable(res.data.available === true);
+        if (!res.data.available) {
+          setUseInfluxDb(false);
+        }
+      }
+    } catch (e) {
+      setInfluxDbAvailable(false);
+      setUseInfluxDb(false);
     }
   };
 
@@ -86,7 +107,10 @@ const TrafficStatistics: React.FC = () => {
         params.startTime = now.subtract(2, 'hour').format('YYYY-MM-DD HH:mm:ss');
         params.endTime = now.format('YYYY-MM-DD HH:mm:ss');
       }
-      const res: any = await statisticsApi.trafficHistory(params);
+      const res: any = await statisticsApi.trafficHistory({
+        ...params,
+        dataSource: useInfluxDb ? 'influxdb' : 'mysql',
+      });
       if (res.code === 200) {
         setHistoryData(res.data || []);
       }
@@ -137,6 +161,7 @@ const TrafficStatistics: React.FC = () => {
 
   useEffect(() => {
     loadCameras();
+    checkInfluxDb();
     loadOverview();
     loadHistory();
 
@@ -312,35 +337,39 @@ const TrafficStatistics: React.FC = () => {
       title: '更新时间',
       dataIndex: 'timestamp',
       key: 'timestamp',
-      render: (v: string) => dayjs(v).format('HH:mm:ss'),
+      render: (v: string) => v ? dayjs(v).format('HH:mm:ss') : '-',
       width: 100,
     },
     {
       title: '5分钟流量(辆)',
       dataIndex: 'flowVolume',
       key: 'flowVolume',
-      render: (v: number) => <strong style={{ color: '#1890ff' }}>{v || 0}</strong>,
+      render: (v: number, r: TrafficRealtimeVO) =>
+        r.level === 'NO_DATA' ? '-' : <strong style={{ color: '#1890ff' }}>{v || 0}</strong>,
       width: 130,
     },
     {
       title: '平均速度(km/h)',
       dataIndex: 'avgSpeed',
       key: 'avgSpeed',
-      render: (v: number) => <strong style={{ color: '#52c41a' }}>{(v || 0).toFixed(1)}</strong>,
+      render: (v: number, r: TrafficRealtimeVO) =>
+        r.level === 'NO_DATA' ? '-' : <strong style={{ color: '#52c41a' }}>{(v || 0).toFixed(1)}</strong>,
       width: 130,
     },
     {
       title: '时间占有率(%)',
       dataIndex: 'occupancy',
       key: 'occupancy',
-      render: (v: number) => <strong style={{ color: '#faad14' }}>{(v || 0).toFixed(1)}%</strong>,
+      render: (v: number, r: TrafficRealtimeVO) =>
+        r.level === 'NO_DATA' ? '-' : <strong style={{ color: '#faad14' }}>{(v || 0).toFixed(1)}%</strong>,
       width: 130,
     },
     {
       title: '密度(辆/km)',
       dataIndex: 'density',
       key: 'density',
-      render: (v: number) => <strong style={{ color: '#eb2f96' }}>{(v || 0).toFixed(1)}</strong>,
+      render: (v: number, r: TrafficRealtimeVO) =>
+        r.level === 'NO_DATA' ? '-' : <strong style={{ color: '#eb2f96' }}>{(v || 0).toFixed(1)}</strong>,
       width: 120,
     },
     {
@@ -449,6 +478,28 @@ const TrafficStatistics: React.FC = () => {
           </Form.Item>
           <Form.Item name="timeRange" label="时间范围">
             <RangePicker showTime format="YYYY-MM-DD HH:mm" />
+          </Form.Item>
+          <Form.Item label="数据源">
+            <Tooltip title={influxDbAvailable ? '切换InfluxDB时序库查询' : 'InfluxDB不可用（未启用或连接失败）'}>
+              <Space>
+                <Switch
+                  checked={useInfluxDb}
+                  onChange={(checked) => {
+                    if (checked && !influxDbAvailable) {
+                      message.warning('InfluxDB不可用，请检查服务状态');
+                      return;
+                    }
+                    setUseInfluxDb(checked);
+                  }}
+                  disabled={!influxDbAvailable}
+                  checkedChildren={<CloudServerOutlined />}
+                  unCheckedChildren={<DatabaseOutlined />}
+                />
+                <span style={{ fontSize: 12, color: influxDbAvailable ? '#52c41a' : '#999' }}>
+                  {useInfluxDb ? 'InfluxDB' : 'MySQL'}
+                </span>
+              </Space>
+            </Tooltip>
           </Form.Item>
           <Form.Item>
             <Space>

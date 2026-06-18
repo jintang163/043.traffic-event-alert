@@ -62,6 +62,17 @@ public class TrafficStatisticsService {
 
     private static final String MEASUREMENT = "traffic_statistics";
 
+    public boolean isInfluxDbAvailable() {
+        if (!influxDBConfig.isEnabled() || influxDBClient == null) {
+            return false;
+        }
+        try {
+            return influxDBClient.ping();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public List<TrafficStatisticsVO> queryStatistics(TrafficStatisticsQuery query) {
         LocalDateTime startTime = query.getStartTime();
         LocalDateTime endTime = query.getEndTime();
@@ -108,6 +119,9 @@ public class TrafficStatisticsService {
         }
         if (query.getLaneNo() != null) {
             flux.append(String.format(" |> filter(fn: (r) => r.lane_no == \"%s\")", query.getLaneNo()));
+        }
+        if (query.getAggregateType() != null && !query.getAggregateType().isEmpty()) {
+            flux.append(String.format(" |> filter(fn: (r) => r.aggregate_type == \"%s\")", query.getAggregateType()));
         }
 
         flux.append(" |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")");
@@ -158,7 +172,10 @@ public class TrafficStatisticsService {
         List<TrafficStatisticsVO> stats = queryStatistics(query);
 
         if (CollectionUtils.isEmpty(stats)) {
-            result.add(generateEmptyRealtime(camera, 1));
+            int laneCount = camera.getLaneCount() != null ? camera.getLaneCount() : 1;
+            for (int i = 1; i <= Math.max(laneCount, 1); i++) {
+                result.add(generateNoDataRealtime(camera, i));
+            }
             return result;
         }
 
@@ -191,7 +208,10 @@ public class TrafficStatisticsService {
         }
 
         if (CollectionUtils.isEmpty(result)) {
-            result.add(generateEmptyRealtime(camera, 1));
+            int laneCount = camera.getLaneCount() != null ? camera.getLaneCount() : 1;
+            for (int i = 1; i <= Math.max(laneCount, 1); i++) {
+                result.add(generateNoDataRealtime(camera, i));
+            }
         }
 
         return result;
@@ -219,6 +239,7 @@ public class TrafficStatisticsService {
         }
 
         for (TrafficRealtimeVO vo : allRealtime) {
+            if ("NO_DATA".equals(vo.getLevel())) continue;
             if (vo.getFlowVolume() != null) {
                 totalFlow += vo.getFlowVolume();
             }
@@ -270,7 +291,9 @@ public class TrafficStatisticsService {
         if (trackPoint == null || trackPoint.getCameraId() == null) return;
 
         Long cameraId = trackPoint.getCameraId();
-        Integer laneNo = inferLaneNumber(trackPoint);
+        Camera camera = cameraMapper.selectById(cameraId);
+        int laneCount = camera != null && camera.getLaneCount() != null ? camera.getLaneCount() : 1;
+        Integer laneNo = inferLaneNumber(trackPoint, laneCount);
 
         String laneKey = cameraId + "_" + laneNo;
         String speedKey = cameraId + "_" + laneNo + "_speed";
@@ -481,16 +504,24 @@ public class TrafficStatisticsService {
     }
 
     private List<Integer> getLaneX1Range(Camera camera, int laneNo) {
-        return Arrays.asList((laneNo - 1) * 400, laneNo * 400);
+        if (camera.getResolutionWidth() != null && camera.getResolutionWidth() > 0
+                && camera.getLaneCount() != null && camera.getLaneCount() > 0) {
+            int laneWidth = camera.getResolutionWidth() / camera.getLaneCount();
+            return Arrays.asList((laneNo - 1) * laneWidth, laneNo * laneWidth);
+        }
+        int defaultWidth = 1920;
+        int laneCount = camera.getLaneCount() != null ? camera.getLaneCount() : 1;
+        int laneWidth = defaultWidth / Math.max(laneCount, 1);
+        return Arrays.asList((laneNo - 1) * laneWidth, laneNo * laneWidth);
     }
 
-    private Integer inferLaneNumber(TrackPoint trackPoint) {
+    private Integer inferLaneNumber(TrackPoint trackPoint, int laneCount) {
+        if (laneCount <= 1) return 1;
         if (trackPoint.getPixelX() == null) return 1;
         BigDecimal pixelX = trackPoint.getPixelX();
-        if (pixelX.compareTo(new BigDecimal("0.25")) < 0) return 1;
-        if (pixelX.compareTo(new BigDecimal("0.5")) < 0) return 2;
-        if (pixelX.compareTo(new BigDecimal("0.75")) < 0) return 3;
-        return 4;
+        BigDecimal laneWidth = BigDecimal.ONE.divide(BigDecimal.valueOf(laneCount), 4, RoundingMode.HALF_UP);
+        int lane = pixelX.divide(laneWidth, 0, RoundingMode.FLOOR).intValue() + 1;
+        return Math.min(Math.max(lane, 1), laneCount);
     }
 
     private void saveToMySQL(TrafficStatistics stats) {
@@ -553,20 +584,20 @@ public class TrafficStatisticsService {
         return vo;
     }
 
-    private TrafficRealtimeVO generateEmptyRealtime(Camera camera, int laneNo) {
+    private TrafficRealtimeVO generateNoDataRealtime(Camera camera, int laneNo) {
         TrafficRealtimeVO vo = new TrafficRealtimeVO();
         vo.setCameraId(camera.getId());
         vo.setCameraName(camera.getCameraName());
         vo.setRoadName(camera.getRoadName());
         vo.setLaneNo(laneNo);
         vo.setLaneName(laneNo + "号车道");
-        vo.setTimestamp(LocalDateTime.now());
-        vo.setFlowVolume(0);
-        vo.setAvgSpeed(BigDecimal.ZERO);
-        vo.setOccupancy(BigDecimal.ZERO);
-        vo.setDensity(BigDecimal.ZERO);
-        vo.setLevel("SMOOTH");
-        vo.setLevelName("畅通");
+        vo.setTimestamp(null);
+        vo.setFlowVolume(null);
+        vo.setAvgSpeed(null);
+        vo.setOccupancy(null);
+        vo.setDensity(null);
+        vo.setLevel("NO_DATA");
+        vo.setLevelName("无数据");
         return vo;
     }
 
@@ -588,6 +619,7 @@ public class TrafficStatisticsService {
         switch (level) {
             case "CONGESTED": return "拥堵";
             case "SLOW": return "缓行";
+            case "NO_DATA": return "无数据";
             default: return "畅通";
         }
     }

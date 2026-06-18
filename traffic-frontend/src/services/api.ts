@@ -137,13 +137,15 @@ export const statisticsApi = {
     request.get<any, Result<any>>('/api/statistics/overview'),
   trafficOverview: () =>
     request.get<any, Result<any>>('/api/statistics/traffic/overview'),
+  influxDbStatus: () =>
+    request.get<any, Result<any>>('/api/statistics/traffic/influxdb-status'),
   trafficHistory: (params: {
     cameraId?: number;
     laneNo?: number;
     startTime?: string;
     endTime?: string;
     aggregateType?: string;
-    useInfluxDb?: boolean;
+    dataSource?: string;
   }) =>
     request.get<any, Result<any>>('/api/statistics/traffic/history', { params }),
   trafficRealtime: (cameraId: number) =>

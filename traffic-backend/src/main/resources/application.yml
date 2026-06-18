@@ -115,7 +115,7 @@ device:
     gb28181MediaPort: "10000"
 
 influxdb:
-  enabled: true
+  enabled: false
   url: http://localhost:8086
   token: traffic-alert-token
   org: traffic-alert
