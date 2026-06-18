@@ -550,3 +550,32 @@ CREATE TABLE IF NOT EXISTS traffic_statistics (
     UNIQUE KEY uk_cam_lane_time (camera_id, lane_no, stat_time, aggregate_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS video_clip (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    camera_id BIGINT,
+    camera_name VARCHAR(128),
+    clip_type VARCHAR(32) COMMENT '事件类型:ACCIDENT/DEBRIS/PARKING/PEDESTRIAN等',
+    alert_event_id BIGINT,
+    event_no VARCHAR(32),
+    file_name VARCHAR(255),
+    file_path VARCHAR(512) COMMENT 'MinIO对象路径(MP4)',
+    file_url VARCHAR(1024) COMMENT 'MP4访问URL(含预签名)',
+    hls_playlist_path VARCHAR(512) COMMENT 'MinIO HLS m3u8对象路径',
+    hls_playlist_url VARCHAR(1024) COMMENT 'HLS播放URL(含预签名)',
+    file_size BIGINT,
+    duration INT COMMENT '时长(秒)',
+    start_time DATETIME,
+    end_time DATETIME,
+    thumbnail_url VARCHAR(1024) COMMENT '缩略图URL',
+    record_status INT DEFAULT 0 COMMENT '0未开始1录制中2成功-1失败',
+    fail_reason VARCHAR(512),
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_event_id (alert_event_id),
+    INDEX idx_clip_type (clip_type),
+    INDEX idx_start_time (start_time),
+    INDEX idx_event_no (event_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+

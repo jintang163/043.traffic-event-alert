@@ -10,6 +10,7 @@ import Departments from '@/pages/Departments';
 import GeoFences from '@/pages/GeoFences';
 import Tracks from '@/pages/Tracks';
 import TrafficStatistics from '@/pages/TrafficStatistics';
+import EventVideos from '@/pages/EventVideos';
 import Rules from '@/pages/Rules';
 import DecisionTables from '@/pages/DecisionTables';
 import RuleExecutionLogs from '@/pages/RuleExecutionLogs';
@@ -109,6 +110,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <TrafficStatistics />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/event-videos"
+          element={
+            <ProtectedRoute>
+              <EventVideos />
             </ProtectedRoute>
           }
         />

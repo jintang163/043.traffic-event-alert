@@ -45,6 +45,7 @@ public class AlertEventService {
     private final GlobalTrackService globalTrackService;
     private final DebrisClassificationService debrisClassificationService;
     private final AccidentSeverityService accidentSeverityService;
+    private final VideoRecordingService videoRecordingService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -206,6 +207,12 @@ public class AlertEventService {
             } catch (Exception e) {
                 log.warn("关联告警事件与轨迹失败: eventNo={}, error={}", eventNo, e.getMessage());
             }
+        }
+
+        try {
+            videoRecordingService.scheduleRecording(event, request);
+        } catch (Exception e) {
+            log.warn("调度事件视频录制失败: eventNo={}, error={}", eventNo, e.getMessage());
         }
 
         return event;

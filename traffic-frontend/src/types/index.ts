@@ -141,6 +141,46 @@ export interface WorkOrder {
   createTime?: string;
 }
 
+export interface VideoClip {
+  id: number;
+  cameraId: number;
+  cameraName?: string;
+  clipType?: string;
+  alertEventId?: number;
+  eventNo?: string;
+  fileName?: string;
+  filePath?: string;
+  fileUrl?: string;
+  hlsPlaylistPath?: string;
+  hlsPlaylistUrl?: string;
+  fileSize?: number;
+  duration?: number;
+  startTime?: string;
+  endTime?: string;
+  thumbnailUrl?: string;
+  recordStatus?: number;
+  failReason?: string;
+  createTime?: string;
+}
+
+export const RECORD_STATUS_LABELS: Record<number, { label: string; color: string }> = {
+  [-1]: { label: '失败', color: '#ff4d4f' },
+  0: { label: '待录制', color: '#8c8c8c' },
+  1: { label: '录制中', color: '#faad14' },
+  2: { label: '成功', color: '#52c41a' },
+};
+
+export const CLIP_TYPE_OPTIONS = [
+  { value: 'ACCIDENT', label: '交通事故', color: '#ff4d4f' },
+  { value: 'DEBRIS', label: '抛洒物', color: '#faad14' },
+  { value: 'PARKING', label: '违规停车', color: '#722ed1' },
+  { value: 'PEDESTRIAN', label: '行人闯入', color: '#1890ff' },
+  { value: 'CONGESTION', label: '交通拥堵', color: '#eb2f96' },
+  { value: 'REVERSE', label: '逆行', color: '#13c2c2' },
+  { value: 'OVERSPEED', label: '超速', color: '#fa8c16' },
+  { value: 'OTHER', label: '其他事件', color: '#8c8c8c' },
+];
+
 export interface Department {
   id: number;
   deptCode: string;

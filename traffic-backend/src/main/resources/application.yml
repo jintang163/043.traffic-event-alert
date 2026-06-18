@@ -36,6 +36,15 @@ minio:
   secretKey: minioadmin
   bucketName: traffic-alert
 
+video:
+  ffmpegPath: ffmpeg
+  tempDir: ${java.io.tmpdir}/traffic-videos
+  preEventSeconds: 10
+  postEventSeconds: 10
+  segmentDuration: 2
+  hlsListSize: 0
+  enabled: true
+
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.traffic.alert.entity

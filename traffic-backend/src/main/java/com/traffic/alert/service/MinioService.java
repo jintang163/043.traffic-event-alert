@@ -8,8 +8,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -69,6 +74,55 @@ public class MinioService {
         }
     }
 
+    public String uploadFile(String objectName, File file, String contentType) {
+        ensureBucketExists();
+        try (InputStream is = new FileInputStream(file)) {
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(minioConfig.getBucketName())
+                    .object(objectName)
+                    .stream(is, file.length(), -1)
+                    .contentType(contentType)
+                    .build());
+            log.info("文件上传成功: {} (size={}KB)", objectName, file.length() / 1024);
+            return getFileUrl(objectName);
+        } catch (Exception e) {
+            log.error("文件上传失败: {}", e.getMessage());
+            throw new RuntimeException("文件上传失败: " + e.getMessage());
+        }
+    }
+
+    public int uploadDirectory(String prefix, File localDir) {
+        if (!localDir.exists() || !localDir.isDirectory()) {
+            return 0;
+        }
+        ensureBucketExists();
+        int count = 0;
+        try (Stream<Path> paths = Files.walk(localDir.toPath())) {
+            Iterable<Path> iterable = paths.filter(Files::isRegularFile)::iterator;
+            for (Path path : iterable) {
+                File file = path.toFile();
+                String relative = localDir.toPath().relativize(path).toString().replace("\\", "/");
+                String objectName = (prefix == null || prefix.isEmpty() ? "" : prefix.endsWith("/") ? prefix : prefix + "/") + relative;
+                String contentType = detectContentType(file.getName());
+                uploadFile(objectName, file, contentType);
+                count++;
+            }
+        } catch (Exception e) {
+            log.error("目录上传失败: dir={}, error={}", localDir.getAbsolutePath(), e.getMessage());
+        }
+        return count;
+    }
+
+    private String detectContentType(String fileName) {
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".m3u8")) return "application/x-mpegURL";
+        if (lower.endsWith(".ts")) return "video/MP2T";
+        if (lower.endsWith(".mp4")) return "video/mp4";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        return "application/octet-stream";
+    }
+
     public InputStream downloadFile(String objectName) {
         try {
             return minioClient.getObject(GetObjectArgs.builder()
@@ -108,6 +162,18 @@ public class MinioService {
         } catch (Exception e) {
             log.error("获取预签名URL失败: {}", e.getMessage());
             return getFileUrl(objectName);
+        }
+    }
+
+    public boolean objectExists(String objectName) {
+        try {
+            minioClient.statObject(StatObjectArgs.builder()
+                    .bucket(minioConfig.getBucketName())
+                    .object(objectName)
+                    .build());
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 }

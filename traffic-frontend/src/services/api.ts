@@ -324,4 +324,19 @@ export const decisionTableApi = {
     request.delete<any, Result<any>>(`/api/decision-tables/${id}`),
 };
 
+export const videoApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/videos/page', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/videos/${id}`),
+  listByEvent: (eventId: number) =>
+    request.get<any, Result<any>>(`/api/videos/by-event/${eventId}`),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/videos/${id}`),
+  ffmpegStatus: () =>
+    request.get<any, Result<any>>('/api/videos/ffmpeg-status'),
+  stats: () =>
+    request.get<any, Result<any>>('/api/videos/stats'),
+};
+
 export default request;

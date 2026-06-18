@@ -13,15 +13,23 @@ public class VideoClip extends BaseEntity {
 
     private Long cameraId;
 
+    private String cameraName;
+
     private String clipType;
 
     private Long alertEventId;
+
+    private String eventNo;
 
     private String fileName;
 
     private String filePath;
 
     private String fileUrl;
+
+    private String hlsPlaylistPath;
+
+    private String hlsPlaylistUrl;
 
     private Long fileSize;
 
@@ -32,4 +40,8 @@ public class VideoClip extends BaseEntity {
     private LocalDateTime endTime;
 
     private String thumbnailUrl;
+
+    private Integer recordStatus;
+
+    private String failReason;
 }

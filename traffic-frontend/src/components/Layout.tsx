@@ -15,6 +15,7 @@ import {
   TableOutlined,
   FileSearchOutlined,
   LineChartOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -92,6 +93,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: '/traffic-statistics',
       icon: <LineChartOutlined />,
       label: '交通统计',
+    },
+    {
+      key: '/event-videos',
+      icon: <PlayCircleOutlined />,
+      label: '事件视频',
     },
     {
       key: 'sub_rule_engine',
