@@ -23,6 +23,8 @@ public class GeoFence extends BaseEntity {
 
     private String polygonPoints;
 
+    private String polygonPointsPixel;
+
     private BigDecimal centerLongitude;
 
     private BigDecimal centerLatitude;

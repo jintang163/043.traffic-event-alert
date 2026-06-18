@@ -14,6 +14,7 @@ public class AiEngineConfig {
     private String streamPath = "/api/v1/detect/stream";
     private String trackPath = "/api/v1/track";
     private String eventPath = "/api/v1/event/analyze";
+    private String fencePath = "/api/v1/fence";
     private Integer connectTimeout = 5000;
     private Integer readTimeout = 30000;
 }

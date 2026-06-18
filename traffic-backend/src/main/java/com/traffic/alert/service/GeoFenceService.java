@@ -11,6 +11,7 @@ import com.traffic.alert.mapper.GeoFenceMapper;
 import com.traffic.alert.utils.GeoPolygonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,14 +20,23 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GeoFenceService {
 
     private final GeoFenceMapper geoFenceMapper;
     private final CameraService cameraService;
+    private final AiEngineService aiEngineService;
+
+    public GeoFenceService(GeoFenceMapper geoFenceMapper,
+                           @Lazy CameraService cameraService,
+                           AiEngineService aiEngineService) {
+        this.geoFenceMapper = geoFenceMapper;
+        this.cameraService = cameraService;
+        this.aiEngineService = aiEngineService;
+    }
 
     private static final DateTimeFormatter FENCE_CODE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -106,6 +116,7 @@ public class GeoFenceService {
             }
             geoFenceMapper.insert(geoFence);
             log.info("创建电子围栏: fenceCode={}, fenceName={}", geoFence.getFenceCode(), geoFence.getFenceName());
+            syncFenceToEngine("add", geoFence);
         } else {
             GeoFence exist = getById(geoFence.getId());
             if (exist == null) {
@@ -113,6 +124,7 @@ public class GeoFenceService {
             }
             geoFenceMapper.updateById(geoFence);
             log.info("更新电子围栏: fenceId={}, fenceName={}", geoFence.getId(), geoFence.getFenceName());
+            syncFenceToEngine("update", geoFence);
         }
 
         return geoFence;
@@ -126,6 +138,7 @@ public class GeoFenceService {
         }
         geoFenceMapper.deleteById(id);
         log.info("删除电子围栏: fenceId={}, fenceName={}", id, exist.getFenceName());
+        syncFenceToEngine("delete", exist);
     }
 
     public GeoFence toggleAlert(Long id, boolean enabled) {
@@ -136,6 +149,7 @@ public class GeoFenceService {
         fence.setAlertEnabled(enabled ? 1 : 0);
         geoFenceMapper.updateById(fence);
         log.info("{}围栏告警: fenceId={}", enabled ? "启用" : "禁用", id);
+        syncFenceToEngine("update", fence);
         return fence;
     }
 
@@ -147,6 +161,7 @@ public class GeoFenceService {
         fence.setStatus(status);
         geoFenceMapper.updateById(fence);
         log.info("设置围栏状态: fenceId={}, status={}", id, status);
+        syncFenceToEngine("update", fence);
         return fence;
     }
 
@@ -196,5 +211,34 @@ public class GeoFenceService {
             case 3 -> "#52c41a";
             default -> "#1890ff";
         };
+    }
+
+    private void syncFenceToEngine(String action, GeoFence fence) {
+        try {
+            Map<String, Object> fenceData = Map.ofEntries(
+                    Map.entry("fenceId", String.valueOf(fence.getId())),
+                    Map.entry("fenceCode", fence.getFenceCode() != null ? fence.getFenceCode() : ""),
+                    Map.entry("fenceName", fence.getFenceName() != null ? fence.getFenceName() : ""),
+                    Map.entry("fenceType", fence.getFenceType() != null ? fence.getFenceType() : 1),
+                    Map.entry("cameraId", fence.getCameraId() != null ? fence.getCameraId() : 0),
+                    Map.entry("polygonPointsPixel", fence.getPolygonPointsPixel() != null ? fence.getPolygonPointsPixel() : "[]"),
+                    Map.entry("polygonPoints", fence.getPolygonPoints() != null ? fence.getPolygonPoints() : "[]"),
+                    Map.entry("alertEnabled", fence.getAlertEnabled() != null ? fence.getAlertEnabled() : 1),
+                    Map.entry("alertLevel", fence.getAlertLevel() != null ? fence.getAlertLevel() : 2),
+                    Map.entry("detectTargetTypes", fence.getDetectTargetTypes() != null ? fence.getDetectTargetTypes() : ""),
+                    Map.entry("staySeconds", fence.getStaySeconds() != null ? fence.getStaySeconds() : 0),
+                    Map.entry("cooldownSeconds", fence.getCooldownSeconds() != null ? fence.getCooldownSeconds() : 60),
+                    Map.entry("notifyEnabled", fence.getNotifyEnabled() != null ? fence.getNotifyEnabled() : 1),
+                    Map.entry("linkWorkOrder", fence.getLinkWorkOrder() != null ? fence.getLinkWorkOrder() : 0),
+                    Map.entry("color", fence.getColor() != null ? fence.getColor() : "#ff4d4f"),
+                    Map.entry("description", fence.getDescription() != null ? fence.getDescription() : "")
+            );
+            boolean success = aiEngineService.syncFenceToEngine(action, fenceData);
+            if (!success) {
+                log.warn("同步围栏到AI引擎未成功: action={}, fenceId={}", action, fence.getId());
+            }
+        } catch (Exception e) {
+            log.error("同步围栏到AI引擎异常: action={}, fenceId={}, error={}", action, fence.getId(), e.getMessage());
+        }
     }
 }

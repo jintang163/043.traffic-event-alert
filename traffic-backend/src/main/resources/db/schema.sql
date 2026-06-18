@@ -236,7 +236,8 @@ CREATE TABLE IF NOT EXISTS geo_fence (
     fence_type INT DEFAULT 1 COMMENT '围栏类型：1-施工区 2-应急车道 3-禁入区 4-自定义',
     camera_id BIGINT,
     camera_name VARCHAR(128),
-    polygon_points TEXT COMMENT '多边形顶点坐标JSON数组 [[lng,lat],...]',
+    polygon_points TEXT COMMENT 'GIS多边形顶点坐标JSON [[lng,lat],...]用于地图展示',
+    polygon_points_pixel TEXT COMMENT '归一化像素坐标JSON [[nx,ny],...] 值0~1 用于AI检测',
     center_longitude DECIMAL(10,6),
     center_latitude DECIMAL(10,6),
     area DECIMAL(12,2) COMMENT '面积 平方米',
@@ -261,7 +262,7 @@ CREATE TABLE IF NOT EXISTS geo_fence (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO geo_fence (fence_code, fence_name, fence_type, camera_id, camera_name, polygon_points, center_longitude, center_latitude, area, alert_enabled, alert_level, detect_target_types, stay_seconds, cooldown_seconds, notify_enabled, link_work_order, color, description, sort_order, status, create_time) VALUES
-('FENCE001', 'K100+500施工区', 1, 1, '京港澳高速K100+500北', '[[116.3970,39.9045],[116.3978,39.9045],[116.3978,39.9040],[116.3970,39.9040]]', 116.397400, 39.904250, 2500.00, 1, 2, 'person,car,truck', 5, 60, 1, 1, '#faad14', 'K100+500处道路施工区域', 1, 1, NOW()),
-('FENCE002', 'K100+500应急车道', 2, 1, '京港澳高速K100+500北', '[[116.3965,39.9043],[116.3969,39.9043],[116.3969,39.9038],[116.3965,39.9038]]', 116.396700, 39.904050, 1200.00, 1, 3, 'car,truck,bus', 3, 120, 1, 1, '#ff4d4f', '应急车道禁入区域', 2, 1, NOW()),
-('FENCE003', 'K50+200禁入区', 3, 3, '京藏高速K50+200东', '[[116.4070,39.9145],[116.4078,39.9145],[116.4078,39.9140],[116.4070,39.9140]]', 116.407400, 39.914250, 1800.00, 1, 2, 'person', 0, 60, 1, 0, '#52c41a', '行人禁入区域', 3, 1, NOW());
+INSERT INTO geo_fence (fence_code, fence_name, fence_type, camera_id, camera_name, polygon_points, polygon_points_pixel, center_longitude, center_latitude, area, alert_enabled, alert_level, detect_target_types, stay_seconds, cooldown_seconds, notify_enabled, link_work_order, color, description, sort_order, status, create_time) VALUES
+('FENCE001', 'K100+500施工区', 1, 1, '京港澳高速K100+500北', '[[116.3970,39.9045],[116.3978,39.9045],[116.3978,39.9040],[116.3970,39.9040]]', '[[0.1,0.1],[0.9,0.1],[0.9,0.8],[0.1,0.8]]', 116.397400, 39.904250, 2500.00, 1, 2, 'person,car,truck', 5, 60, 1, 1, '#faad14', 'K100+500处道路施工区域', 1, 1, NOW()),
+('FENCE002', 'K100+500应急车道', 2, 1, '京港澳高速K100+500北', '[[116.3965,39.9043],[116.3969,39.9043],[116.3969,39.9038],[116.3965,39.9038]]', '[[0.0,0.1],[0.1,0.1],[0.1,0.9],[0.0,0.9]]', 116.396700, 39.904050, 1200.00, 1, 3, 'car,truck,bus', 3, 120, 1, 1, '#ff4d4f', '应急车道禁入区域', 2, 1, NOW()),
+('FENCE003', 'K50+200禁入区', 3, 3, '京藏高速K50+200东', '[[116.4070,39.9145],[116.4078,39.9145],[116.4078,39.9140],[116.4070,39.9140]]', '[[0.2,0.05],[0.8,0.05],[0.8,0.95],[0.2,0.95]]', 116.407400, 39.914250, 1800.00, 1, 2, 'person', 0, 60, 1, 0, '#52c41a', '行人禁入区域', 3, 1, NOW());

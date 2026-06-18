@@ -130,7 +130,8 @@ export interface GeoFence {
   fenceType: number;
   cameraId?: number;
   cameraName?: string;
-  polygonPoints: string;
+  polygonPoints?: string;
+  polygonPointsPixel: string;
   centerLongitude?: number;
   centerLatitude?: number;
   area?: number;

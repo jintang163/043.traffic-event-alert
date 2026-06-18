@@ -65,27 +65,6 @@ async def batch_load_fences(fences: List[dict]):
     }
 
 
-@router.get("/check/point")
-async def check_point_in_fence(
-    lng: float,
-    lat: float,
-    camera_id: Optional[int] = None
-):
-    intruded = fence_manager.check_point_intrusion(lng, lat, camera_id)
-    return {
-        "intruded": len(intruded) > 0,
-        "fences": [
-            {
-                "fence_id": f.fence_id,
-                "fence_name": f.fence_name,
-                "fence_type": f.fence_type,
-                "alert_level": f.alert_level,
-            }
-            for f in intruded
-        ]
-    }
-
-
 @router.get("/types")
 async def get_fence_types():
     return {

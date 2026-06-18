@@ -8,7 +8,14 @@ class FenceConfig(BaseModel):
     fence_name: str = Field(description="围栏名称")
     fence_type: int = Field(1, description="围栏类型：1-施工区 2-应急车道 3-禁入区 4-自定义")
     camera_id: Optional[int] = Field(None, description="关联摄像头ID")
-    polygon_points: List[List[float]] = Field(description="多边形顶点 [[lng,lat],...]")
+    polygon_points_pixel: List[List[float]] = Field(
+        default_factory=list,
+        description="归一化像素坐标 [[nx,ny],...] 值0~1，用于AI检测"
+    )
+    polygon_points: List[List[float]] = Field(
+        default_factory=list,
+        description="GIS坐标 [[lng,lat],...]，用于地图展示（可选）"
+    )
     center_lng: Optional[float] = Field(None, description="中心点经度")
     center_lat: Optional[float] = Field(None, description="中心点纬度")
     area: Optional[float] = Field(None, description="面积 平方米")

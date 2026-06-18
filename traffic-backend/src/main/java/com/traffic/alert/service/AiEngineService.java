@@ -122,4 +122,89 @@ public class AiEngineService {
             return Map.of("success", false, "error", e.getMessage());
         }
     }
+
+    public boolean syncFenceToEngine(String action, Map<String, Object> fenceData) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + aiEngineConfig.getFencePath();
+            HttpRequest.Builder requestBuilder;
+            String jsonBody = JSON.toJSONString(fenceData);
+
+            switch (action) {
+                case "add" -> requestBuilder = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+                case "update" -> {
+                    String fenceId = String.valueOf(fenceData.get("fenceId"));
+                    requestBuilder = HttpRequest.newBuilder()
+                            .uri(URI.create(url + "/" + fenceId))
+                            .header("Content-Type", "application/json")
+                            .PUT(HttpRequest.BodyPublishers.ofString(jsonBody));
+                }
+                case "delete" -> {
+                    String fenceId = String.valueOf(fenceData.get("fenceId"));
+                    requestBuilder = HttpRequest.newBuilder()
+                            .uri(URI.create(url + "/" + fenceId))
+                            .header("Content-Type", "application/json")
+                            .DELETE();
+                }
+                default -> {
+                    log.warn("未知围栏同步操作: {}", action);
+                    return false;
+                }
+            }
+
+            HttpResponse<String> response = httpClient.send(
+                    requestBuilder.timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout())).build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
+            log.info("同步围栏到AI引擎: action={}, fenceId={}, response={}", action, fenceData.get("fenceId"), response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("同步围栏到AI引擎失败: action={}, error={}", action, e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean batchLoadFences(List<Map<String, Object>> fenceList) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + aiEngineConfig.getFencePath() + "/batch-load";
+            String jsonBody = JSON.toJSONString(fenceList);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("批量加载围栏到AI引擎: count={}, response={}", fenceList.size(), response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("批量加载围栏到AI引擎失败: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean loadFencesByCamera(Long cameraId) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + aiEngineConfig.getFencePath()
+                    + "?camera_id=" + cameraId;
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("按摄像头加载围栏到AI引擎: cameraId={}, response={}", cameraId, response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("按摄像头加载围栏到AI引擎失败: cameraId={}, error={}", cameraId, e.getMessage());
+            return false;
+        }
+    }
 }

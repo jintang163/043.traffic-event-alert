@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from typing import Dict, List, Optional
@@ -6,12 +7,10 @@ from threading import RLock
 from app.schemas.fence import FenceConfig
 from app.schemas.tracking import TrackedObject
 from app.utils.polygon import (
-    GeoPoint,
-    geo_point_in_polygon,
+    Point,
+    point_in_polygon,
     bbox_in_polygon,
     bbox_overlap_polygon_ratio,
-    parse_polygon_points,
-    Point,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,49 +75,14 @@ class FenceManager:
         with self._lock:
             return list(self._fences.values())
 
-    def check_point_intrusion(self, lng: float, lat: float, camera_id: Optional[int] = None) -> List[FenceConfig]:
-        fences = self.get_fences_by_camera(camera_id) if camera_id else self.get_all_fences()
-        intruded = []
-        point = GeoPoint(lng, lat)
+    def _get_pixel_polygon(self, fence: FenceConfig, frame_width: int, frame_height: int) -> List[Point]:
+        if not fence.polygon_points_pixel or len(fence.polygon_points_pixel) < 3:
+            return []
 
-        for fence in fences:
-            if not fence.alert_enabled:
-                continue
-            if not fence.polygon_points or len(fence.polygon_points) < 3:
-                continue
-
-            polygon = [GeoPoint(p[0], p[1]) for p in fence.polygon_points]
-            if geo_point_in_polygon(point, polygon):
-                intruded.append(fence)
-
-        return intruded
-
-    def check_bbox_intrusion(
-        self,
-        x1: float, y1: float, x2: float, y2: float,
-        frame_width: int, frame_height: int,
-        camera_id: Optional[int] = None
-    ) -> List[tuple]:
-        fences = self.get_fences_by_camera(camera_id) if camera_id else self.get_all_fences()
-        results = []
-
-        for fence in fences:
-            if not fence.alert_enabled:
-                continue
-            if not fence.polygon_points or len(fence.polygon_points) < 3:
-                continue
-
-            norm_polygon = [
-                Point(p[0] * frame_width, p[1] * frame_height)
-                for p in fence.polygon_points
-            ]
-
-            overlap = bbox_overlap_polygon_ratio(x1, y1, x2, y2, norm_polygon)
-            if overlap > 0:
-                results.append((fence, overlap))
-
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results
+        return [
+            Point(p[0] * frame_width, p[1] * frame_height)
+            for p in fence.polygon_points_pixel
+        ]
 
     def check_tracked_objects(
         self,
@@ -133,17 +97,15 @@ class FenceManager:
 
         for obj in tracked_objects:
             class_name = obj.class_name.lower()
-            x1 = obj.bbox.x1
-            y1 = obj.bbox.y1
-            x2 = obj.bbox.x2
-            y2 = obj.bbox.y2
 
             fences = self.get_fences_by_camera(camera_id) if camera_id else self.get_all_fences()
 
             for fence in fences:
                 if not fence.alert_enabled:
                     continue
-                if not fence.polygon_points or len(fence.polygon_points) < 3:
+
+                pixel_polygon = self._get_pixel_polygon(fence, frame_width, frame_height)
+                if not pixel_polygon:
                     continue
 
                 if fence.detect_target_types:
@@ -151,19 +113,15 @@ class FenceManager:
                     if class_name not in target_lower:
                         continue
 
-                norm_polygon = [
-                    Point(p[0] * frame_width, p[1] * frame_height)
-                    for p in fence.polygon_points
-                ]
+                x1, y1 = obj.bbox.x1, obj.bbox.y1
+                x2, y2 = obj.bbox.x2, obj.bbox.y2
 
                 is_inside = bbox_in_polygon(
-                    x1, y1, x2, y2, norm_polygon,
+                    x1, y1, x2, y2, pixel_polygon,
                     check_center=True, check_corners=True
                 )
 
                 if is_inside:
-                    state_key = f"{fence.fence_id}_{obj.track_id}"
-
                     if fence.fence_id not in self._intrusion_states:
                         self._intrusion_states[fence.fence_id] = {}
 
@@ -231,13 +189,21 @@ class FenceManager:
 
             for f_data in fence_list:
                 try:
+                    polygon_points_pixel = self._parse_polygon_field(
+                        f_data.get("polygonPointsPixel", "[]")
+                    )
+                    polygon_points = self._parse_polygon_field(
+                        f_data.get("polygonPoints", "[]")
+                    )
+
                     fence = FenceConfig(
-                        fence_id=str(f_data.get("id", "")),
+                        fence_id=str(f_data.get("id", f_data.get("fenceId", ""))),
                         fence_code=f_data.get("fenceCode", ""),
                         fence_name=f_data.get("fenceName", ""),
                         fence_type=f_data.get("fenceType", 1),
                         camera_id=f_data.get("cameraId"),
-                        polygon_points=f_data.get("polygonPoints", []),
+                        polygon_points_pixel=polygon_points_pixel,
+                        polygon_points=polygon_points,
                         center_lng=f_data.get("centerLongitude"),
                         center_lat=f_data.get("centerLatitude"),
                         area=f_data.get("area"),
@@ -261,6 +227,18 @@ class FenceManager:
         if not types_str:
             return []
         return [t.strip() for t in types_str.split(",") if t.strip()]
+
+    def _parse_polygon_field(self, field) -> List[List[float]]:
+        if isinstance(field, list):
+            return field
+        if isinstance(field, str) and field.strip():
+            try:
+                parsed = json.loads(field)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return []
 
 
 fence_manager = FenceManager()

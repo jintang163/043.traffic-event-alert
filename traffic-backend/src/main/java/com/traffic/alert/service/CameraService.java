@@ -8,6 +8,7 @@ import com.traffic.alert.config.DeviceSdkConfig;
 import com.traffic.alert.dto.CameraQuery;
 import com.traffic.alert.dto.PtzControlRequest;
 import com.traffic.alert.entity.Camera;
+import com.traffic.alert.entity.GeoFence;
 import com.traffic.alert.mapper.CameraMapper;
 import com.alibaba.fastjson2.JSON;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class CameraService {
 
     private final CameraMapper cameraMapper;
     private final AiEngineService aiEngineService;
+    private final GeoFenceService geoFenceService;
     private final DeviceSdkConfig deviceSdkConfig;
 
     private final HttpClient sdkHttpClient = HttpClient.newBuilder()
@@ -96,6 +98,30 @@ public class CameraService {
                     log.info("摄像头[{}]保存后自动启动AI检测: {}", camera.getId(), JSON.toJSONString(result));
                 } catch (Exception e) {
                     log.warn("摄像头[{}]自动启动AI检测失败: {}", camera.getId(), e.getMessage());
+                }
+                try {
+                    List<GeoFence> fences = geoFenceService.listByCamera(camera.getId());
+                    if (!fences.isEmpty()) {
+                        List<Map<String, Object>> fenceDataList = fences.stream().map(f -> Map.ofEntries(
+                                Map.entry("fenceId", String.valueOf(f.getId())),
+                                Map.entry("fenceCode", f.getFenceCode() != null ? f.getFenceCode() : ""),
+                                Map.entry("fenceName", f.getFenceName() != null ? f.getFenceName() : ""),
+                                Map.entry("fenceType", f.getFenceType() != null ? f.getFenceType() : 1),
+                                Map.entry("cameraId", f.getCameraId() != null ? f.getCameraId() : 0),
+                                Map.entry("polygonPointsPixel", f.getPolygonPointsPixel() != null ? f.getPolygonPointsPixel() : "[]"),
+                                Map.entry("polygonPoints", f.getPolygonPoints() != null ? f.getPolygonPoints() : "[]"),
+                                Map.entry("alertEnabled", f.getAlertEnabled() != null ? f.getAlertEnabled() : 1),
+                                Map.entry("alertLevel", f.getAlertLevel() != null ? f.getAlertLevel() : 2),
+                                Map.entry("detectTargetTypes", f.getDetectTargetTypes() != null ? f.getDetectTargetTypes() : ""),
+                                Map.entry("staySeconds", f.getStaySeconds() != null ? f.getStaySeconds() : 0),
+                                Map.entry("cooldownSeconds", f.getCooldownSeconds() != null ? f.getCooldownSeconds() : 60),
+                                Map.entry("color", f.getColor() != null ? f.getColor() : "#ff4d4f")
+                        )).toList();
+                        aiEngineService.batchLoadFences(fenceDataList);
+                        log.info("摄像头[{}]启动检测后同步 {} 个围栏到AI引擎", camera.getId(), fences.size());
+                    }
+                } catch (Exception e) {
+                    log.warn("摄像头[{}]同步围栏到AI引擎失败: {}", camera.getId(), e.getMessage());
                 }
             }
         } else if (!isNew && before != null && before.getStatus() == 1 && camera.getStatus() != null && camera.getStatus() == 0) {
