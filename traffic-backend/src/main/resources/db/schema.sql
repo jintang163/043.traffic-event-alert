@@ -1067,3 +1067,11 @@ INSERT INTO edge_node (node_code, node_name, hardware_model, gpu_info, cpu_cores
     '192.168.1.102', '00:04:4B:1A:2B:3D', 116.407400, 39.914200, '京藏高速K50+200东方向机柜', 1, 0, 30,
     2, '负责K50段东西双向摄像头AI分析', 2, NOW());
 
+ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS source_node_code VARCHAR(64) DEFAULT NULL COMMENT '来源边缘节点编码' AFTER accident_evaluation_reasons;
+ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_source_node_code (source_node_code);
+
+ALTER TABLE edge_offline_event ADD COLUMN IF NOT EXISTS alert_event_id BIGINT DEFAULT NULL COMMENT '关联告警事件ID' AFTER event_uuid;
+ALTER TABLE edge_offline_event ADD COLUMN IF NOT EXISTS snapshot_url VARCHAR(512) DEFAULT NULL COMMENT '截图URL(MinIO)' AFTER video_path;
+ALTER TABLE edge_offline_event ADD COLUMN IF NOT EXISTS video_url VARCHAR(512) DEFAULT NULL COMMENT '视频URL(MinIO)' AFTER snapshot_url;
+ALTER TABLE edge_offline_event ADD INDEX IF NOT EXISTS idx_alert_event_id (alert_event_id);
+

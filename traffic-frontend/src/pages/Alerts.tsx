@@ -411,10 +411,15 @@ const Alerts: React.FC = () => {
       title: '摄像头',
       dataIndex: 'cameraName',
       width: 160,
-      render: (text) => (
+      render: (text, record) => (
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <VideoCameraOutlined />
           {text}
+          {record.sourceNodeCode && (
+            <Tooltip title={`边缘节点: ${record.sourceNodeCode}`}>
+              <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', marginLeft: 2 }}>边缘</Tag>
+            </Tooltip>
+          )}
         </span>
       ),
     },
@@ -651,7 +656,12 @@ const Alerts: React.FC = () => {
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="置信度">{(currentAlert.confidence * 100).toFixed(1)}%</Descriptions.Item>
-              <Descriptions.Item label="摄像头">{currentAlert.cameraName}</Descriptions.Item>
+              <Descriptions.Item label="摄像头">
+                {currentAlert.cameraName}
+                {currentAlert.sourceNodeCode && (
+                  <Tag color="blue" style={{ marginLeft: 8 }}>边缘: {currentAlert.sourceNodeCode}</Tag>
+                )}
+              </Descriptions.Item>
               <Descriptions.Item label="状态">
                 <Tag color={getStatusColor(currentAlert.alertStatus)}>
                   {currentAlert.isFalsePositive === 1 ? '误报' : ALERT_STATUS_LABELS[currentAlert.alertStatus]}

@@ -5,5 +5,27 @@
   "heartbeat_interval": 30,
   "cache_db_path": "./edge_cache.db",
   "retry_max": 5,
-  "retry_initial_delay": 10
+  "retry_initial_delay": 10,
+  "snapshot_dir": "./snapshots",
+  "clip_dir": "./clips",
+  "clip_seconds": 10,
+  "detect_fps": 2,
+  "model_path": null,
+  "engine_path": null,
+  "confidence_threshold": 0.5,
+  "cooldown_seconds": 5.0,
+  "cameras": [
+    {
+      "camera_id": 1,
+      "camera_name": "京港澳高速K100+500北",
+      "stream_url": "rtsp://192.168.1.101:554/stream1",
+      "fps": 25.0
+    },
+    {
+      "camera_id": 2,
+      "camera_name": "京港澳高速K100+500南",
+      "stream_url": "rtsp://192.168.1.102:554/stream1",
+      "fps": 25.0
+    }
+  ]
 }

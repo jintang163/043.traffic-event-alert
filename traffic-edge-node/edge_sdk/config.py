@@ -1,8 +1,8 @@
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass
-from typing import Any, Dict, Optional
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,15 @@ class EdgeNodeConfig:
     cache_db_path: str = "./edge_cache.db"
     retry_max: int = 5
     retry_initial_delay: int = 10
+    snapshot_dir: str = "./snapshots"
+    clip_dir: str = "./clips"
+    clip_seconds: int = 10
+    detect_fps: int = 2
+    model_path: Optional[str] = None
+    engine_path: Optional[str] = None
+    confidence_threshold: float = 0.5
+    cooldown_seconds: float = 5.0
+    cameras: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "EdgeNodeConfig":
@@ -23,7 +32,8 @@ class EdgeNodeConfig:
         config = cls(**valid_fields)
         logger.info(
             f"Config loaded from dict: server_url={config.server_url}, "
-            f"node_code={config.node_code}, heartbeat_interval={config.heartbeat_interval}s"
+            f"node_code={config.node_code}, heartbeat_interval={config.heartbeat_interval}s, "
+            f"cameras={len(config.cameras)}"
         )
         return config
 

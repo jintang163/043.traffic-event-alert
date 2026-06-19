@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Table,
   Button,
@@ -78,6 +78,21 @@ const EdgeNodes: React.FC = () => {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [offlineEvents, setOfflineEvents] = useState<EdgeOfflineEvent[]>([]);
   const [offlineEventsLoading, setOfflineEventsLoading] = useState(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startAutoRefresh = useCallback(() => {
+    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    refreshTimerRef.current = setInterval(() => {
+      loadData();
+      loadStats();
+    }, 30000);
+  }, [current, pageSize]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    };
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -123,6 +138,7 @@ const EdgeNodes: React.FC = () => {
     loadData();
     loadStats();
     loadDepartments();
+    startAutoRefresh();
   }, [current, pageSize]);
 
   const handleSearch = () => {

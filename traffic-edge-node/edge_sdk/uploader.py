@@ -30,9 +30,12 @@ class EventUploader:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._wake_event = threading.Event()
-        self._event_upload_url = f"{self.server_url}/api/edge/events"
-        self._event_register_url = f"{self.server_url}/api/edge/nodes/register"
-        self._heartbeat_url = f"{self.server_url}/api/edge/nodes/heartbeat"
+        self._register_url = f"{self.server_url}/api/edge/register"
+        self._heartbeat_url = f"{self.server_url}/api/edge/heartbeat"
+        self._event_upload_url = f"{self.server_url}/api/edge/event/upload"
+        self._batch_upload_url = f"{self.server_url}/api/edge/events/batch-upload"
+        self._config_url_template = f"{self.server_url}/api/edge/{{nodeCode}}/config"
+        self._ack_url_template = f"{self.server_url}/api/edge/{{nodeCode}}/event-ack"
 
     def _is_online(self) -> bool:
         if self._is_online_callback:
@@ -60,13 +63,21 @@ class EventUploader:
             files = {}
             if snapshot_file and os.path.exists(snapshot_file):
                 try:
-                    files["snapshot"] = open(snapshot_file, "rb")
+                    files["snapshot"] = (
+                        os.path.basename(snapshot_file),
+                        open(snapshot_file, "rb"),
+                        "image/jpeg",
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to open snapshot file {snapshot_file}: {e}")
 
             if video_file and os.path.exists(video_file):
                 try:
-                    files["video"] = open(video_file, "rb")
+                    files["video"] = (
+                        os.path.basename(video_file),
+                        open(video_file, "rb"),
+                        "video/mp4",
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to open video file {video_file}: {e}")
 
@@ -111,7 +122,7 @@ class EventUploader:
             finally:
                 for f in files.values():
                     try:
-                        f.close()
+                        f[1].close()
                     except Exception:
                         pass
         except requests.exceptions.Timeout:
@@ -127,15 +138,57 @@ class EventUploader:
             )
             return False
 
+    def batch_upload_events(
+        self,
+        events: list,
+    ) -> Dict[str, int]:
+        success_count = 0
+        fail_count = 0
+        for item in events:
+            event_data = {
+                "event_uuid": item.get("event_uuid"),
+                "event_type": item.get("event_type"),
+                "event_time": item.get("event_time"),
+                "event_data": item.get("event_data"),
+            }
+            ok = self.upload_event(
+                event_data,
+                snapshot_file=item.get("snapshot_path"),
+                video_file=item.get("video_path"),
+            )
+            if ok:
+                success_count += 1
+            else:
+                fail_count += 1
+        return {"success": success_count, "fail": fail_count}
+
+    def send_event_ack(self, event_uuids: list) -> bool:
+        try:
+            url = self._ack_url_template.format(nodeCode=self.node_code)
+            response = requests.post(
+                url,
+                json={"nodeCode": self.node_code, "eventUuids": event_uuids},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                logger.info(f"Event ack success: count={len(event_uuids)}")
+                return True
+            return False
+        except Exception as e:
+            logger.warning(f"Event ack failed: {e}")
+            return False
+
     def register_node(self, node_name: str = "") -> bool:
         try:
             payload = {
                 "nodeCode": self.node_code,
                 "nodeName": node_name,
-                "registerTime": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "hardwareModel": getattr(self, "_hardware_model", ""),
+                "gpuInfo": getattr(self, "_gpu_info", ""),
+                "heartbeatInterval": getattr(self, "_heartbeat_interval", 30),
             }
             response = requests.post(
-                self._event_register_url,
+                self._register_url,
                 json=payload,
                 timeout=10,
             )
@@ -153,9 +206,22 @@ class EventUploader:
 
     def send_heartbeat(self, heartbeat_data: Dict[str, Any]) -> bool:
         try:
+            payload = {
+                "nodeCode": heartbeat_data.get("nodeCode", self.node_code),
+                "cpuUsage": heartbeat_data.get("cpu_percent"),
+                "memoryUsage": heartbeat_data.get("memory_percent"),
+                "gpuUsage": heartbeat_data.get("gpu_percent"),
+                "temperature": heartbeat_data.get("cpu_temp_c"),
+                "networkStatus": 1 if heartbeat_data.get("networkStatus") == "online" else 0,
+                "diskUsage": heartbeat_data.get("disk_percent"),
+                "processCount": heartbeat_data.get("process_count"),
+                "cameraOnlineCount": heartbeat_data.get("camera_online_count"),
+                "eventQueueSize": heartbeat_data.get("eventQueueSize", 0),
+                "eventCountToday": heartbeat_data.get("event_count_today"),
+            }
             response = requests.post(
                 self._heartbeat_url,
-                json=heartbeat_data,
+                json=payload,
                 timeout=5,
             )
             if response.status_code == 200:
@@ -175,6 +241,18 @@ class EventUploader:
             logger.debug(f"Heartbeat exception: {e}")
             return False
 
+    def fetch_config(self) -> Optional[Dict[str, Any]]:
+        try:
+            url = self._config_url_template.format(nodeCode=self.node_code)
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("data", result)
+            return None
+        except Exception as e:
+            logger.debug(f"Fetch config failed: {e}")
+            return None
+
     def process_pending_events(self):
         if not self.cache:
             logger.warning("No cache configured, cannot process pending events")
@@ -186,6 +264,7 @@ class EventUploader:
             logger.warning(f"Failed to reset failed events: {e}")
 
         processed_count = 0
+        ack_uuids = []
         while True:
             if not self._running:
                 break
@@ -231,6 +310,7 @@ class EventUploader:
 
                 if success:
                     self.cache.mark_success(event_uuid)
+                    ack_uuids.append(event_uuid)
                     processed_count += 1
                 else:
                     retry_count = event.get("retry_count", 0) + 1
@@ -244,8 +324,15 @@ class EventUploader:
                             f"(attempt {retry_count}/{self.retry_max})"
                         )
 
+                if len(ack_uuids) >= 20:
+                    self.send_event_ack(ack_uuids)
+                    ack_uuids = []
+
             if processed_count > 0 and processed_count % 100 == 0:
                 logger.info(f"Processed {processed_count} pending events so far")
+
+        if ack_uuids:
+            self.send_event_ack(ack_uuids)
 
         if processed_count > 0:
             logger.info(f"Pending event processing completed: {processed_count} events uploaded")

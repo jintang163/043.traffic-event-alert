@@ -17,6 +17,8 @@ public class EdgeOfflineEvent extends BaseEntity {
 
     private String eventUuid;
 
+    private Long alertEventId;
+
     private String eventData;
 
     private String eventType;
@@ -26,6 +28,10 @@ public class EdgeOfflineEvent extends BaseEntity {
     private String snapshotPath;
 
     private String videoPath;
+
+    private String snapshotUrl;
+
+    private String videoUrl;
 
     private Integer uploadStatus;
 

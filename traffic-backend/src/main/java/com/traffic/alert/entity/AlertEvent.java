@@ -71,4 +71,6 @@ public class AlertEvent extends BaseEntity {
     private Integer accidentPriority;
 
     private String accidentEvaluationReasons;
+
+    private String sourceNodeCode;
 }

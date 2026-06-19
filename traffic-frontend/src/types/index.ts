@@ -96,6 +96,7 @@ export interface AlertEvent {
   accidentSeverityLabel?: string;
   accidentPriority?: number;
   accidentEvaluationReasons?: string;
+  sourceNodeCode?: string;
 }
 
 export const ACCIDENT_SEVERITY_OPTIONS = [

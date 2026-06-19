@@ -6,7 +6,7 @@ import sys
 import time
 import uuid
 
-from edge_sdk import EdgeNodeClient, EdgeNodeConfig
+from edge_sdk import EdgeNodeClient, EdgeNodeConfig, TensorRTDetector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,7 +35,14 @@ def main():
     logger.info(f"Starting edge node: {config.node_code} ({config.node_name})")
     logger.info(f"Server URL: {config.server_url}")
 
-    client = EdgeNodeClient(config=config)
+    detector = TensorRTDetector(
+        model_path=config.model_path,
+        engine_path=config.engine_path,
+        confidence_threshold=config.confidence_threshold,
+        cooldown_seconds=config.cooldown_seconds,
+    )
+
+    client = EdgeNodeClient(config=config, detector=detector)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -46,51 +53,30 @@ def main():
     else:
         logger.warning("Node registration failed, will continue anyway")
 
+    for cam in config.cameras:
+        client.add_stream(
+            stream_url=cam.get("stream_url", ""),
+            camera_id=cam.get("camera_id", 0),
+            camera_name=cam.get("camera_name", ""),
+            fps=cam.get("fps", 25.0),
+        )
+        logger.info(f"Added stream: {cam.get('camera_name', '')} ({cam.get('camera_id', 0)})")
+
+    if not config.cameras:
+        logger.info("No cameras configured, running in event submission mode")
+
     client.start()
-
-    event_types = [
-        "accident",
-        "debris",
-        "reverse",
-        "congestion",
-        "stopped_vehicle",
-    ]
-
-    event_counter = 0
 
     try:
         while True:
             status = client.get_status()
             logger.info(
                 f"Node status: online={status['is_online']}, "
-                f"queue_size={status['event_queue_size']}"
+                f"queue_size={status['event_queue_size']}, "
+                f"streams={len(status.get('streams', {}))}, "
+                f"detector={status.get('detector_loaded', False)}"
             )
-
-            event_type = event_types[event_counter % len(event_types)]
-            event_data = {
-                "eventId": f"EVT{uuid.uuid4().hex[:12]}",
-                "cameraId": 1001,
-                "cameraName": "Camera-K100-01",
-                "confidence": 0.85 + (event_counter % 10) * 0.01,
-                "description": f"模拟{event_type}事件 #{event_counter + 1}",
-                "severity": "high" if event_type in ("accident", "reverse") else "medium",
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            }
-
-            result = client.submit_event(
-                event_type=event_type,
-                event_data=event_data,
-            )
-
-            logger.info(
-                f"Event submitted: uuid={result['event_uuid']}, "
-                f"type={result['event_type']}, "
-                f"uploaded={result['uploaded']}, cached={result['cached']}"
-            )
-
-            event_counter += 1
-            time.sleep(5)
-
+            time.sleep(10)
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
     finally:
