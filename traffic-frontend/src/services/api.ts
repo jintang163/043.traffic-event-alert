@@ -455,4 +455,24 @@ export const policePushApi = {
     request.get<any, Result<any>>('/api/police-pushes/statistics/summary'),
 };
 
+export const predictionApi = {
+  page: (params: {
+    current?: number;
+    size?: number;
+    status?: string;
+    riskLevel?: number;
+  }) =>
+    request.get<any, Result<any>>('/api/predictions/page', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/predictions/${id}`),
+  range: (params: { startTime: string; endTime: string }) =>
+    request.get<any, Result<any>>('/api/predictions/range', { params }),
+  nextHour: () =>
+    request.get<any, Result<any>>('/api/predictions/next-hour'),
+  generate: (targetHours = 1) =>
+    request.post<any, Result<any>>('/api/predictions/generate', null, { params: { targetHours } }),
+  summary: () =>
+    request.get<any, Result<any>>('/api/predictions/summary'),
+};
+
 export default request;

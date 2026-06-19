@@ -932,3 +932,111 @@ export const POLICE_PUSH_STATUS_LABELS: Record<number, { label: string; color: s
   2: { label: '推送成功', color: 'success' },
   3: { label: '推送失败', color: 'error' },
 };
+
+export interface WeatherData {
+  id: number;
+  recordTime: string;
+  locationCode?: string;
+  locationName?: string;
+  longitude?: number;
+  latitude?: number;
+  weatherType: 'SUNNY' | 'CLOUDY' | 'RAIN' | 'SNOW' | 'FOG' | 'HAZE' | string;
+  temperature?: number;
+  humidity?: number;
+  windSpeed?: number;
+  windDirection?: number;
+  visibility?: number;
+  precipitation?: number;
+  createTime?: string;
+}
+
+export interface EventPrediction {
+  id: number;
+  predictionNo: string;
+  predictionTime: string;
+  targetStartTime: string;
+  targetEndTime: string;
+  targetHours: number;
+  cameraId?: number;
+  cameraName?: string;
+  roadName?: string;
+  longitude: number;
+  latitude: number;
+  geomWkt?: string;
+  riskScore: number;
+  riskLevel: 1 | 2 | 3 | 4;
+  riskLevelLabel: string;
+  eventType?: 'ACCIDENT' | 'DEBRIS' | 'CONGESTION' | string;
+  eventTypeLabel?: string;
+  probability?: number;
+  historicalEventCount?: number;
+  weatherFactor?: number;
+  timeFactor?: number;
+  holidayFactor?: number;
+  featureJson?: string;
+  confidence?: number;
+  status?: number;
+  actualEventCount?: number;
+  predictionAccuracy?: number;
+  description?: string;
+  createTime?: string;
+}
+
+export interface PredictionSummary {
+  totalPoints: number;
+  predictionTime?: string;
+  targetStartTime?: string;
+  targetEndTime?: string;
+  level1Count: number;
+  level2Count: number;
+  level3Count: number;
+  level4Count: number;
+  avgScore: number;
+  maxScore: number;
+  highestRisk?: EventPrediction;
+}
+
+export const WEATHER_TYPE_LABELS: Record<string, string> = {
+  SUNNY: '晴',
+  CLOUDY: '多云',
+  RAIN: '雨',
+  SNOW: '雪',
+  FOG: '雾',
+  HAZE: '霾',
+};
+
+export const WEATHER_TYPE_COLORS: Record<string, string> = {
+  SUNNY: '#fadb14',
+  CLOUDY: '#8c8c8c',
+  RAIN: '#1890ff',
+  SNOW: '#bae7ff',
+  FOG: '#d9d9d9',
+  HAZE: '#bfbfbf',
+};
+
+export const RISK_LEVEL_LABELS: Record<number, string> = {
+  1: '低风险',
+  2: '中风险',
+  3: '高风险',
+  4: '极高风险',
+};
+
+export const RISK_LEVEL_COLORS: Record<number, string> = {
+  1: '#52c41a',
+  2: '#faad14',
+  3: '#fa8c16',
+  4: '#ff4d4f',
+};
+
+export const RISK_HEATMAP_COLORS: Record<number, string> = {
+  1: 'rgba(82, 196, 26, 0.6)',
+  2: 'rgba(250, 173, 20, 0.6)',
+  3: 'rgba(250, 140, 22, 0.7)',
+  4: 'rgba(255, 77, 79, 0.8)',
+};
+
+export const PREDICTION_EVENT_TYPE_LABELS: Record<string, string> = {
+  ACCIDENT: '交通事故',
+  DEBRIS: '路面抛洒物',
+  CONGESTION: '交通拥堵',
+};

@@ -11,6 +11,7 @@ import GeoFences from '@/pages/GeoFences';
 import Tracks from '@/pages/Tracks';
 import TrafficStatistics from '@/pages/TrafficStatistics';
 import EventVideos from '@/pages/EventVideos';
+import PredictionDashboard from '@/pages/PredictionDashboard';
 import Rules from '@/pages/Rules';
 import DecisionTables from '@/pages/DecisionTables';
 import RuleExecutionLogs from '@/pages/RuleExecutionLogs';
@@ -126,6 +127,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <EventVideos />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/prediction"
+          element={
+            <ProtectedRoute>
+              <PredictionDashboard />
             </ProtectedRoute>
           }
         />

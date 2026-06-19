@@ -905,3 +905,71 @@ INSERT INTO notify_rule (rule_name, event_type, event_level, channel_id, templat
 ('逆行-短信值班', 'REVERSE', NULL, 2, (SELECT id FROM notify_template WHERE template_code='TPL_SMS_REVERSE'), 1, NULL, 0, 1, 2, 10, NOW()),
 ('逆行-紧急语音外呼', 'REVERSE', 3, 3, (SELECT id FROM notify_template WHERE template_code='TPL_VOICE_REVERSE'), 1, NULL, 0, 1, 1, 11, NOW());
 
+CREATE TABLE IF NOT EXISTS weather_data (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    record_time DATETIME NOT NULL COMMENT '记录时间',
+    location_code VARCHAR(32) DEFAULT 'DEFAULT' COMMENT '区域编码',
+    location_name VARCHAR(64) COMMENT '区域名称',
+    longitude DECIMAL(10,6) COMMENT '中心经度',
+    latitude DECIMAL(10,6) COMMENT '中心纬度',
+    weather_type VARCHAR(16) NOT NULL COMMENT '天气类型: SUNNY/CLOUDY/RAIN/SNOW/FOG/HAZE',
+    temperature DECIMAL(5,2) COMMENT '气温(摄氏度)',
+    humidity DECIMAL(5,2) COMMENT '相对湿度(%)',
+    wind_speed DECIMAL(6,2) COMMENT '风速(m/s)',
+    wind_direction INT COMMENT '风向(0-360度)',
+    visibility DECIMAL(6,2) COMMENT '能见度(km)',
+    precipitation DECIMAL(6,2) COMMENT '降水量(mm)',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_record_time (record_time),
+    INDEX idx_location (location_code),
+    INDEX idx_weather_type (weather_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='天气数据';
+
+CREATE TABLE IF NOT EXISTS event_prediction (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    prediction_no VARCHAR(64) NOT NULL UNIQUE COMMENT '预测编号',
+    prediction_time DATETIME NOT NULL COMMENT '预测生成时间',
+    target_start_time DATETIME NOT NULL COMMENT '预测窗口开始时间',
+    target_end_time DATETIME NOT NULL COMMENT '预测窗口结束时间',
+    target_hours INT DEFAULT 1 COMMENT '预测窗口小时数',
+    camera_id BIGINT COMMENT '摄像头ID(路段标识)',
+    camera_name VARCHAR(128) COMMENT '摄像头名称',
+    road_name VARCHAR(128) COMMENT '路段名称',
+    longitude DECIMAL(10,6) NOT NULL COMMENT '经度',
+    latitude DECIMAL(10,6) NOT NULL COMMENT '纬度',
+    geom POINT COMMENT '空间坐标字段(MySQL GIS)',
+    risk_score DECIMAL(8,4) NOT NULL COMMENT '风险评分 0-100',
+    risk_level INT NOT NULL COMMENT '风险等级: 1-低 2-中 3-高 4-极高',
+    risk_level_label VARCHAR(16) COMMENT '风险等级标签',
+    event_type VARCHAR(32) COMMENT '预测事件类型: ACCIDENT/DEBRIS/CONGESTION',
+    event_type_label VARCHAR(32) COMMENT '事件类型标签',
+    probability DECIMAL(6,4) COMMENT '事件发生概率',
+    historical_event_count INT COMMENT '同条件历史事件数',
+    weather_factor DECIMAL(6,4) COMMENT '天气影响因子',
+    time_factor DECIMAL(6,4) COMMENT '时段影响因子',
+    holiday_factor DECIMAL(6,4) COMMENT '节假日影响因子',
+    feature_json TEXT COMMENT '特征向量JSON',
+    confidence DECIMAL(6,4) COMMENT '预测置信度',
+    status INT DEFAULT 1 COMMENT '状态: 0-无效 1-有效 2-已验证',
+    actual_event_count INT DEFAULT 0 COMMENT '实际发生事件数',
+    prediction_accuracy DECIMAL(6,4) COMMENT '预测准确率',
+    description VARCHAR(512) COMMENT '预测说明',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_prediction_no (prediction_no),
+    INDEX idx_prediction_time (prediction_time),
+    INDEX idx_target_time (target_start_time, target_end_time),
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_risk_level (risk_level),
+    INDEX idx_status (status),
+    SPATIAL INDEX idx_geom (geom)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='事件预测结果';
+
+INSERT INTO weather_data (record_time, location_code, location_name, longitude, latitude, weather_type, temperature, humidity, wind_speed, visibility, precipitation, create_time) VALUES
+(NOW(), 'DEFAULT', '北京海淀区', 116.407400, 39.904200, 'SUNNY', 26.5, 45.0, 2.5, 15.0, 0.0, NOW()),
+(DATE_SUB(NOW(), INTERVAL 1 HOUR), 'DEFAULT', '北京海淀区', 116.407400, 39.904200, 'SUNNY', 25.8, 48.0, 2.3, 15.0, 0.0, NOW()),
+(DATE_SUB(NOW(), INTERVAL 2 HOUR), 'DEFAULT', '北京海淀区', 116.407400, 39.904200, 'SUNNY', 24.2, 52.0, 2.0, 12.0, 0.0, NOW());
+

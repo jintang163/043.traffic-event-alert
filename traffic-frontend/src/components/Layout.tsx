@@ -22,6 +22,7 @@ import {
   CarOutlined,
   SendOutlined,
   SafetyOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -74,6 +75,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </Badge>
       ),
       label: '告警中心',
+    },
+    {
+      key: '/prediction',
+      icon: <ThunderboltOutlined />,
+      label: '预测预警',
     },
     {
       key: '/work-orders',
