@@ -14,6 +14,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -48,6 +52,27 @@ public class UserService {
 
     public User getById(Long id) {
         return userMapper.selectById(id);
+    }
+
+    public List<User> listByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return userMapper.selectBatchIds(ids);
+    }
+
+    public List<User> listByDeptIds(Collection<Long> deptIds) {
+        if (deptIds == null || deptIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return userMapper.selectList(new LambdaQueryWrapper<User>()
+                .in(User::getDeptId, deptIds)
+                .eq(User::getStatus, 1));
+    }
+
+    public List<User> listAllEnabled() {
+        return userMapper.selectList(new LambdaQueryWrapper<User>()
+                .eq(User::getStatus, 1));
     }
 
     public PageResult<User> page(PageQuery query) {

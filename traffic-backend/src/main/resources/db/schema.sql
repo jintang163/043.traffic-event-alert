@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     nickname VARCHAR(64),
     email VARCHAR(128),
     phone VARCHAR(32),
+    dept_id BIGINT COMMENT '所属部门ID',
     role INT DEFAULT 1,
     status INT DEFAULT 1,
     avatar VARCHAR(512),
@@ -16,7 +17,8 @@ CREATE TABLE IF NOT EXISTS sys_user (
     update_time DATETIME,
     deleted INT DEFAULT 0,
     INDEX idx_username (username),
-    INDEX idx_role (role)
+    INDEX idx_role (role),
+    INDEX idx_dept_id (dept_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS sys_department (
@@ -219,9 +221,11 @@ CREATE TABLE IF NOT EXISTS ptz_cruise_point (
     INDEX idx_sort_order (sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO sys_user (username, password, nickname, role, status, create_time) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '系统管理员', 0, 1, NOW()),
-('operator', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '值班员', 1, 1, NOW());
+INSERT INTO sys_user (username, password, nickname, phone, dept_id, role, status, create_time) VALUES
+('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '系统管理员', '13800138000', 2, 0, 1, NOW()),
+('operator', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '值班员', '13800138001', 1, 1, 1, NOW()),
+('duty1', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '白班值班员-王磊', '13800138003', 1, 1, 1, NOW()),
+('duty2', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '夜班值班员-李娜', '13800138004', 2, 1, 1, NOW());
 
 INSERT INTO sys_department (dept_code, dept_name, dept_type, longitude, latitude, contact_person, contact_phone, status, create_time) VALUES
 ('MAINT_001', '高速养护一队', 1, 116.407400, 39.904200, '张队长', '13800138001', 1, NOW()),
@@ -596,10 +600,10 @@ CREATE TABLE IF NOT EXISTS notify_channel (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知渠道配置';
 
 INSERT INTO notify_channel (channel_code, channel_name, channel_type, enabled, config_json, sort_order, create_time) VALUES
-('DINGTALK', '钉钉机器人', 'DINGTALK', 0, '{"webhook":"https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN","secret":"YOUR_SECRET"}', 1, NOW()),
-('SMS_ALIYUN', '阿里云短信', 'SMS', 0, '{"accessKeyId":"YOUR_KEY","accessKeySecret":"YOUR_SECRET","signName":"交通告警","templateCode":"SMS_XXX","regionId":"cn-hangzhou"}', 2, NOW()),
-('VOICE_TTS', '语音TTS外呼', 'VOICE', 0, '{"accessKeyId":"YOUR_KEY","accessKeySecret":"YOUR_SECRET","ttsTemplateCode":"TTS_XXX","calledShowNumber":"400XXXXXXX","regionId":"cn-hangzhou"}', 3, NOW()),
-('WECHAT', '企业微信', 'WECHAT', 0, '{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"}', 4, NOW());
+('DINGTALK_DEFAULT', '默认钉钉机器人', 'DINGTALK', 1, '{"webhook":"https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN","secret":"YOUR_SECRET","remark":"配置真实access_token和secret后即可推送"}', 1, NOW()),
+('SMS_ALIYUN', '阿里云短信', 'SMS', 1, '{"accessKeyId":"YOUR_KEY","accessKeySecret":"YOUR_SECRET","signName":"交通告警","templateCode":"SMS_000000000","regionId":"cn-hangzhou","remark":"配置真实AK/SK即启用真实发送，否则本地模拟"}', 2, NOW()),
+('VOICE_TTS', '阿里云语音TTS外呼', 'VOICE', 1, '{"accessKeyId":"YOUR_KEY","accessKeySecret":"YOUR_SECRET","ttsTemplateCode":"TTS_000000000","calledShowNumber":"4008000000","regionId":"cn-hangzhou","remark":"配置真实AK/SK即启用真实外呼，否则本地模拟"}', 3, NOW()),
+('WECHAT_DEFAULT', '默认企业微信', 'WECHAT', 0, '{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY","remark":"配置真实webhook后启用"}', 4, NOW());
 
 CREATE TABLE IF NOT EXISTS notify_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -622,11 +626,11 @@ CREATE TABLE IF NOT EXISTS notify_template (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知模板';
 
 INSERT INTO notify_template (template_code, template_name, channel_type, event_type, event_level, title_template, content_template, status, create_time) VALUES
-('TPL_DINGTALK_DEFAULT', '钉钉默认模板', 'DINGTALK', NULL, NULL, '交通事件告警', '${levelText} 交通事件告警\n事件类型: ${eventTypeText}\n摄像头: ${cameraName}\n位置: ${location}\n时间: ${eventTime}\n置信度: ${confidence}%\n描述: ${description}', 1, NOW()),
-('TPL_SMS_URGENT', '短信紧急模板', 'SMS', NULL, 3, '紧急告警', '【交通告警】紧急!${eventTypeText},${location},${eventTime}', 1, NOW()),
+('TPL_DINGTALK_DEFAULT', '钉钉默认模板', 'DINGTALK', NULL, NULL, '交通事件告警', '【${levelText}】交通事件告警\n事件类型: ${eventTypeText}\n摄像头: ${cameraName}\n位置: ${location}\n时间: ${eventTime}\n置信度: ${confidence}%\n描述: ${description}', 1, NOW()),
+('TPL_SMS_URGENT', '短信紧急模板', 'SMS', NULL, 3, '紧急告警', '【交通告警】紧急!${eventTypeText},${location},${eventTime},请立即处置', 1, NOW()),
 ('TPL_SMS_NORMAL', '短信普通模板', 'SMS', NULL, NULL, '交通告警', '【交通告警】${eventTypeText},${location},${eventTime}', 1, NOW()),
-('TPL_VOICE_URGENT', '语音紧急外呼模板', 'VOICE', NULL, 3, '紧急语音告警', '紧急告警，${location}发生${eventTypeText}，请立即处理', 1, NOW()),
-('TPL_WECHAT_DEFAULT', '企微默认模板', 'WECHAT', NULL, NULL, '交通事件告警', '${levelText} 交通事件告警\n> 事件类型: ${eventTypeText}\n> 摄像头: ${cameraName}\n> 位置: ${location}\n> 时间: ${eventTime}\n> 描述: ${description}', 1, NOW());
+('TPL_VOICE_URGENT', '语音紧急外呼模板', 'VOICE', NULL, 3, '紧急语音告警', '紧急告警,${location}发生${eventTypeText},请立即处理', 1, NOW()),
+('TPL_WECHAT_DEFAULT', '企微默认模板', 'WECHAT', NULL, NULL, '交通事件告警', '**【${levelText}】交通事件告警**\n> 事件类型: ${eventTypeText}\n> 摄像头: ${cameraName}\n> 位置: ${location}\n> 时间: ${eventTime}\n> 描述: ${description}', 1, NOW());
 
 CREATE TABLE IF NOT EXISTS notify_rule (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -651,12 +655,15 @@ CREATE TABLE IF NOT EXISTS notify_rule (
     INDEX idx_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知推送规则';
 
-INSERT INTO notify_rule (rule_name, event_type, event_level, channel_id, template_id, recipient_type, at_all, enabled, priority, sort_order, create_time) VALUES
-('紧急事件-钉钉@所有', NULL, 3, 1, 1, 4, 1, 1, 0, 1, NOW()),
-('紧急事件-短信通知', NULL, 3, 2, 2, 1, 0, 1, 1, 2, NOW()),
-('紧急事件-语音外呼', NULL, 3, 3, 4, 1, 0, 1, 2, 3, NOW()),
-('严重事件-钉钉通知', NULL, 2, 1, 1, 1, 0, 1, 3, 4, NOW()),
-('一般事件-钉钉通知', NULL, 1, 1, 1, 1, 0, 1, 5, 5, NOW());
+INSERT INTO notify_rule (rule_name, event_type, event_level, channel_id, template_id, recipient_type, recipient_ids, at_all, enabled, priority, sort_order, create_time) VALUES
+('紧急事件-钉钉@所有', NULL, 3, 1, 1, 4, NULL, 1, 1, 0, 1, NOW()),
+('紧急事件-短信通知值班', NULL, 3, 2, 2, 1, NULL, 0, 1, 1, 2, NOW()),
+('紧急事件-语音外呼值班', NULL, 3, 3, 4, 1, NULL, 0, 1, 2, 3, NOW()),
+('紧急事件-短信通知交警部门', NULL, 3, 2, 2, 2, '2', 0, 1, 2, 4, NOW()),
+('严重事件-钉钉通知值班', NULL, 2, 1, 1, 1, NULL, 0, 1, 3, 5, NOW()),
+('严重事件-短信通知值班', NULL, 2, 2, 3, 1, NULL, 0, 1, 4, 6, NOW()),
+('一般事件-钉钉通知值班', NULL, 1, 1, 1, 1, NULL, 0, 1, 5, 7, NOW()),
+('所有事件-通知管理员用户', NULL, NULL, 2, 3, 3, '1', 0, 1, 10, 8, NOW());
 
 CREATE TABLE IF NOT EXISTS on_duty (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -678,6 +685,12 @@ CREATE TABLE IF NOT EXISTS on_duty (
     INDEX idx_duty_date (duty_date),
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='值班人员排班';
+
+INSERT INTO on_duty (user_id, user_name, phone, dept_id, dept_name, duty_date, duty_type, start_time, end_time, status, create_time) VALUES
+(3, '白班值班员-王磊', '13800138003', 1, '高速养护一队', CURDATE(), 1, CONCAT(CURDATE(), ' 08:00:00'), CONCAT(CURDATE(), ' 20:00:00'), 1, NOW()),
+(4, '夜班值班员-李娜', '13800138004', 2, '高速交警一大队', CURDATE(), 2, CONCAT(CURDATE(), ' 20:00:00'), CONCAT(DATE_ADD(CURDATE(), INTERVAL 1 DAY), ' 08:00:00'), 1, NOW()),
+(3, '白班值班员-王磊', '13800138003', 1, '高速养护一队', DATE_ADD(CURDATE(), INTERVAL 1 DAY), 1, CONCAT(DATE_ADD(CURDATE(), INTERVAL 1 DAY), ' 08:00:00'), CONCAT(DATE_ADD(CURDATE(), INTERVAL 1 DAY), ' 20:00:00'), 1, NOW()),
+(4, '夜班值班员-李娜', '13800138004', 2, '高速交警一大队', DATE_ADD(CURDATE(), INTERVAL 1 DAY), 2, CONCAT(DATE_ADD(CURDATE(), INTERVAL 1 DAY), ' 20:00:00'), CONCAT(DATE_ADD(CURDATE(), INTERVAL 2 DAY), ' 08:00:00'), 1, NOW());
 
 CREATE TABLE IF NOT EXISTS notify_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

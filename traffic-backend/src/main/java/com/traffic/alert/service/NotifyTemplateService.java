@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ import java.util.Map;
 public class NotifyTemplateService {
 
     private final NotifyTemplateMapper notifyTemplateMapper;
+    private static final DecimalFormat CONFIDENCE_FMT = new DecimalFormat("0.##");
 
     public NotifyTemplate getById(Long id) {
         return notifyTemplateMapper.selectById(id);
@@ -102,17 +104,29 @@ public class NotifyTemplateService {
             case 2 -> "【严重】";
             default -> "【一般】";
         });
+        vars.put("levelTextShort", switch (event.getEventLevel() != null ? event.getEventLevel() : 1) {
+            case 3 -> "紧急";
+            case 2 -> "严重";
+            default -> "一般";
+        });
         vars.put("cameraName", event.getCameraName() != null ? event.getCameraName() : "");
         vars.put("location", event.getLocation() != null ? event.getLocation() : "");
         vars.put("eventTime", event.getEventTime() != null ? event.getEventTime().toString() : "");
         vars.put("description", event.getDescription() != null ? event.getDescription() : "");
-        vars.put("confidence", event.getConfidence() != null
-                ? event.getConfidence().multiply(BigDecimal.valueOf(100)).toPlainString() : "0");
+        BigDecimal conf = event.getConfidence() != null
+                ? event.getConfidence().multiply(BigDecimal.valueOf(100))
+                : BigDecimal.ZERO;
+        vars.put("confidence", CONFIDENCE_FMT.format(conf));
+        vars.put("confidenceRaw", event.getConfidence() != null ? event.getConfidence().toPlainString() : "0");
         vars.put("eventNo", event.getEventNo() != null ? event.getEventNo() : "");
+        vars.put("longitude", event.getLongitude() != null ? event.getLongitude().toPlainString() : "");
+        vars.put("latitude", event.getLatitude() != null ? event.getLatitude().toPlainString() : "");
         vars.put("debrisCategory", event.getDebrisCategory() != null ? event.getDebrisCategory() : "");
         vars.put("debrisCategoryText", buildDebrisCategoryText(event));
         vars.put("accidentSeverity", event.getAccidentSeverity() != null ? event.getAccidentSeverity() : "");
         vars.put("accidentSeverityText", event.getAccidentSeverityLabel() != null ? event.getAccidentSeverityLabel() : "");
+        vars.put("accidentVehicles", event.getAccidentVehicles() != null ? String.valueOf(event.getAccidentVehicles()) : "");
+        vars.put("accidentCasualty", event.getAccidentCasualty() != null ? String.valueOf(event.getAccidentCasualty()) : "");
         return vars;
     }
 
@@ -123,7 +137,9 @@ public class NotifyTemplateService {
             case "REVERSE" -> "车辆逆行";
             case "DEBRIS" -> {
                 if (event.getDebrisCategory() != null && !event.getDebrisCategory().isEmpty()) {
-                    yield "抛洒物-" + DebrisCategory.of(event.getDebrisCategory()).getLabel();
+                    try {
+                        yield "抛洒物-" + DebrisCategory.of(event.getDebrisCategory()).getLabel();
+                    } catch (Exception ignored) {}
                 }
                 yield "路面抛洒物";
             }
@@ -133,6 +149,10 @@ public class NotifyTemplateService {
 
     private String buildDebrisCategoryText(AlertEvent event) {
         if (event.getDebrisCategory() == null || event.getDebrisCategory().isEmpty()) return "";
-        return DebrisCategory.of(event.getDebrisCategory()).getLabel();
+        try {
+            return DebrisCategory.of(event.getDebrisCategory()).getLabel();
+        } catch (Exception e) {
+            return event.getDebrisCategory();
+        }
     }
 }
