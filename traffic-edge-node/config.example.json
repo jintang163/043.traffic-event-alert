@@ -1,0 +1,9 @@
+{
+  "server_url": "http://localhost:8080",
+  "node_code": "EDGE-001",
+  "node_name": "京港澳高速K100边缘节点",
+  "heartbeat_interval": 30,
+  "cache_db_path": "./edge_cache.db",
+  "retry_max": 5,
+  "retry_initial_delay": 10
+}

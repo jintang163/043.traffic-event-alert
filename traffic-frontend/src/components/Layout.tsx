@@ -68,6 +68,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       label: '摄像头管理',
     },
     {
+      key: '/edge-nodes',
+      icon: <ThunderboltOutlined />,
+      label: '边缘节点',
+    },
+    {
       key: '/alerts',
       icon: (
         <Badge count={unreadCount} size="small" offset={[8, -2]}>

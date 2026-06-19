@@ -475,4 +475,25 @@ export const predictionApi = {
     request.get<any, Result<any>>('/api/predictions/summary'),
 };
 
+export const edgeNodeApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/edge-nodes/page', { params }),
+  list: () =>
+    request.get<any, Result<any>>('/api/edge-nodes/list'),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/edge-nodes/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/edge-nodes', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/edge-nodes/${id}`),
+  statistics: () =>
+    request.get<any, Result<any>>('/api/edge-nodes/statistics'),
+  getConfig: (id: number) =>
+    request.get<any, Result<any>>(`/api/edge-nodes/${id}/config`),
+  updateConfig: (id: number, data: any) =>
+    request.post<any, Result<any>>(`/api/edge-nodes/${id}/config`, data),
+  listOfflineEvents: (id: number, uploadStatus?: number) =>
+    request.get<any, Result<any>>(`/api/edge-nodes/${id}/offline-events`, { params: { uploadStatus } }),
+};
+
 export default request;

@@ -1040,3 +1040,86 @@ export const PREDICTION_EVENT_TYPE_LABELS: Record<string, string> = {
   DEBRIS: '路面抛洒物',
   CONGESTION: '交通拥堵',
 };
+
+export interface EdgeNode {
+  id: number;
+  nodeCode: string;
+  nodeName: string;
+  hardwareModel?: string;
+  gpuInfo?: string;
+  cpuCores?: number;
+  memoryGB?: number;
+  storageGB?: number;
+  osInfo?: string;
+  ipAddress?: string;
+  macAddress?: string;
+  longitude?: number;
+  latitude?: number;
+  location?: string;
+  status: number;
+  onlineStatus: number;
+  lastHeartbeat?: string;
+  heartbeatInterval?: number;
+  cpuUsage?: number;
+  memoryUsage?: number;
+  gpuUsage?: number;
+  temperature?: number;
+  cameraCount?: number;
+  eventCountToday?: number;
+  description?: string;
+  deptId?: number;
+  configJson?: string;
+  createTime?: string;
+}
+
+export interface EdgeNodeQuery extends PageQuery {
+  status?: number;
+  onlineStatus?: number;
+  hardwareModel?: string;
+  deptId?: number;
+}
+
+export interface EdgeOfflineEvent {
+  id: number;
+  edgeNodeId?: number;
+  nodeCode: string;
+  eventUuid: string;
+  eventData?: string;
+  eventType: string;
+  eventTime: string;
+  snapshotPath?: string;
+  videoPath?: string;
+  uploadStatus: number;
+  retryCount?: number;
+  maxRetry?: number;
+  uploadTime?: string;
+  errorMessage?: string;
+  createTime?: string;
+}
+
+export const EDGE_NODE_STATUS_LABELS: Record<number, string> = {
+  0: '禁用',
+  1: '启用',
+};
+
+export const EDGE_ONLINE_STATUS_LABELS: Record<number, string> = {
+  0: '离线',
+  1: '在线',
+};
+
+export const EDGE_UPLOAD_STATUS_LABELS: Record<number, { label: string; color: string }> = {
+  0: { label: '待上传', color: 'default' },
+  1: { label: '上传中', color: 'processing' },
+  2: { label: '成功', color: 'success' },
+  3: { label: '失败', color: 'error' },
+};
+
+export const HARDWARE_MODEL_OPTIONS = [
+  { value: 'NVIDIA Jetson Nano', label: 'NVIDIA Jetson Nano' },
+  { value: 'NVIDIA Jetson Xavier NX', label: 'NVIDIA Jetson Xavier NX' },
+  { value: 'NVIDIA Jetson AGX Xavier', label: 'NVIDIA Jetson AGX Xavier' },
+  { value: 'NVIDIA Jetson AGX Orin', label: 'NVIDIA Jetson AGX Orin' },
+  { value: 'NVIDIA Jetson Orin NX', label: 'NVIDIA Jetson Orin NX' },
+  { value: 'NVIDIA Jetson Orin Nano', label: 'NVIDIA Jetson Orin Nano' },
+  { value: 'Other', label: '其他' },
+];

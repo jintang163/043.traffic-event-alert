@@ -23,6 +23,7 @@ import NotifyLogs from '@/pages/NotifyLogs';
 import PlateRecognitions from '@/pages/PlateRecognitions';
 import PolicePushes from '@/pages/PolicePushes';
 import PoliceSystemConfigs from '@/pages/PoliceSystemConfigs';
+import EdgeNodes from '@/pages/EdgeNodes';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -223,6 +224,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PoliceSystemConfigs />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/edge-nodes"
+          element={
+            <ProtectedRoute>
+              <EdgeNodes />
             </ProtectedRoute>
           }
         />
