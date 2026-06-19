@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Card, Button, Space, Slider, Select, Tag, Tooltip, Statistic, Row, Col, Empty } from 'antd';
+import { Card, Button, Space, Slider, Select, Tag, Tooltip, Statistic, Row, Col, Empty, Segmented, Alert } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -9,6 +9,7 @@ import {
   WarningOutlined,
   CarOutlined,
   ClockCircleOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -21,7 +22,10 @@ interface TrackReplayMapProps {
   tracks: GlobalTrack[];
   trackPointsMap: Record<number, TrackPoint[]>;
   beforeMinutes?: number;
+  startTimeStr?: string;
+  endTimeStr?: string;
   height?: number;
+  pixelMode?: boolean;
 }
 
 interface PlayState {
@@ -33,88 +37,138 @@ interface PlayState {
 
 const TRACK_COLORS = ['#1890ff', '#52c41a', '#faad14', '#eb2f96', '#722ed1', '#13c2c2'];
 
+const parseTime = (t?: string | number | Date): number => {
+  if (!t) return 0;
+  return new Date(t).getTime();
+};
+
 const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
   event,
   tracks,
   trackPointsMap,
   beforeMinutes = 5,
+  startTimeStr,
+  endTimeStr,
   height = 480,
+  pixelMode: initialPixelMode = false,
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const polylineRefs = useRef<Record<number, L.Polyline>>({});
   const markerRefs = useRef<Record<number, L.Marker>>({});
   const eventMarkerRef = useRef<L.Marker | null>(null);
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null);
 
+  const [pixelMode, setPixelMode] = useState(initialPixelMode);
   const [playState, setPlayState] = useState<PlayState>({
     isPlaying: false,
     currentTime: 0,
     speed: 1,
     progress: 0,
   });
-
   const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null);
   const [currentPointInfo, setCurrentPointInfo] = useState<Record<number, TrackPoint>>({});
 
   const allPoints = Object.values(trackPointsMap).flat();
-  const hasValidPoints = allPoints.some((p) => p.longitude != null && p.latitude != null);
 
-  const getTimeRange = useCallback(() => {
+  const windowStartTime = parseTime(startTimeStr);
+  const windowEndTime = parseTime(endTimeStr);
+  const hasValidWindow = windowStartTime > 0 && windowEndTime > 0 && windowEndTime > windowStartTime;
+
+  const fallbackTimeRange = useCallback(() => {
     if (allPoints.length === 0) return { startTime: 0, endTime: 0, duration: 0 };
-
-    const times = allPoints
-      .filter((p) => p.frameTime)
-      .map((p) => new Date(p.frameTime).getTime());
-
+    const times = allPoints.filter((p) => p.frameTime).map((p) => parseTime(p.frameTime));
     if (times.length === 0) return { startTime: 0, endTime: 0, duration: 0 };
-
-    const startTime = Math.min(...times);
-    const endTime = Math.max(...times);
-
     return {
-      startTime,
-      endTime,
-      duration: endTime - startTime,
+      startTime: Math.min(...times),
+      endTime: Math.max(...times),
+      duration: Math.max(...times) - Math.min(...times),
     };
   }, [allPoints]);
 
-  const timeRange = getTimeRange();
+  const getStrictTimeRange = useCallback(() => {
+    if (hasValidWindow) {
+      return {
+        startTime: windowStartTime,
+        endTime: windowEndTime,
+        duration: windowEndTime - windowStartTime,
+      };
+    }
+    return fallbackTimeRange();
+  }, [hasValidWindow, windowStartTime, windowEndTime, fallbackTimeRange]);
 
-  const getPointAtTime = useCallback(
-    (points: TrackPoint[], targetTime: number): TrackPoint | null => {
-      if (points.length === 0) return null;
+  const timeRange = getStrictTimeRange();
 
-      const validPoints = points.filter(
-        (p) => p.frameTime && p.longitude != null && p.latitude != null
-      );
-      if (validPoints.length === 0) return null;
+  const hasValidGpsPoints = allPoints.some((p) => p.longitude != null && p.latitude != null);
+  const hasValidPixelPoints = allPoints.some((p) => p.pixelX != null && p.pixelY != null);
+
+  const interpolatePoint = useCallback(
+    (
+      points: TrackPoint[],
+      targetTime: number,
+      useGps: boolean
+    ): { x: number; y: number; point: TrackPoint | null } => {
+      const validPoints = points.filter((p) => {
+        if (!p.frameTime) return false;
+        if (useGps) return p.longitude != null && p.latitude != null;
+        return p.pixelX != null && p.pixelY != null;
+      });
+      if (validPoints.length === 0) return { x: 0, y: 0, point: null };
 
       for (let i = 0; i < validPoints.length; i++) {
-        const pointTime = new Date(validPoints[i].frameTime).getTime();
+        const pointTime = parseTime(validPoints[i].frameTime);
         if (pointTime >= targetTime) {
-          if (i === 0) return validPoints[0];
+          if (i === 0) {
+            const p = validPoints[0];
+            return useGps
+              ? { x: p.longitude as number, y: p.latitude as number, point: p }
+              : { x: p.pixelX as number, y: p.pixelY as number, point: p };
+          }
 
           const prevPoint = validPoints[i - 1];
-          const prevTime = new Date(prevPoint.frameTime).getTime();
+          const prevTime = parseTime(prevPoint.frameTime);
           const currTime = pointTime;
-          const ratio = (targetTime - prevTime) / (currTime - prevTime);
+          const span = currTime - prevTime;
+          const ratio = span > 0 ? (targetTime - prevTime) / span : 0;
 
-          return {
-            ...prevPoint,
-            longitude: prevPoint.longitude! + (validPoints[i].longitude! - prevPoint.longitude!) * ratio,
-            latitude: prevPoint.latitude! + (validPoints[i].latitude! - prevPoint.latitude!) * ratio,
-          } as TrackPoint;
+          if (useGps) {
+            return {
+              x: (prevPoint.longitude as number) + ((validPoints[i].longitude as number) - (prevPoint.longitude as number)) * ratio,
+              y: (prevPoint.latitude as number) + ((validPoints[i].latitude as number) - (prevPoint.latitude as number)) * ratio,
+              point: {
+                ...prevPoint,
+                speed: prevPoint.speed != null && validPoints[i].speed != null
+                  ? prevPoint.speed + (validPoints[i].speed! - prevPoint.speed) * ratio
+                  : prevPoint.speed,
+              } as TrackPoint,
+            };
+          } else {
+            return {
+              x: (prevPoint.pixelX as number) + ((validPoints[i].pixelX as number) - (prevPoint.pixelX as number)) * ratio,
+              y: (prevPoint.pixelY as number) + ((validPoints[i].pixelY as number) - (prevPoint.pixelY as number)) * ratio,
+              point: {
+                ...prevPoint,
+                speed: prevPoint.speed != null && validPoints[i].speed != null
+                  ? prevPoint.speed + (validPoints[i].speed! - prevPoint.speed) * ratio
+                  : prevPoint.speed,
+              } as TrackPoint,
+            };
+          }
         }
       }
 
-      return validPoints[validPoints.length - 1];
+      const last = validPoints[validPoints.length - 1];
+      return useGps
+        ? { x: last.longitude as number, y: last.latitude as number, point: last }
+        : { x: last.pixelX as number, y: last.pixelY as number, point: last };
     },
     []
   );
 
-  const initMap = useCallback(() => {
+  const initLeafletMap = useCallback(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
     const map = L.map(mapRef.current, {
@@ -132,14 +186,10 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
   const fitMapToBounds = useCallback(() => {
     if (!mapInstanceRef.current || allPoints.length === 0) return;
 
-    const validPoints = allPoints.filter(
-      (p) => p.longitude != null && p.latitude != null
-    );
+    const validPoints = allPoints.filter((p) => p.longitude != null && p.latitude != null);
     if (validPoints.length === 0) return;
 
-    const bounds = L.latLngBounds(
-      validPoints.map((p) => [p.latitude!, p.longitude!])
-    );
+    const bounds = L.latLngBounds(validPoints.map((p) => [p.latitude!, p.longitude!]));
 
     if (event.latitude != null && event.longitude != null) {
       bounds.extend([event.latitude, event.longitude]);
@@ -211,7 +261,7 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
     marker.bindPopup(`
       <div style="min-width: 160px;">
         <div style="font-weight: 600; margin-bottom: 4px; color: #ff4d4f;">
-          <WarningOutlined /> 事件发生点
+          事件发生点
         </div>
         <div style="font-size: 12px; color: #666;">
           ${event.eventTime || ''}
@@ -233,9 +283,7 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
 
     tracks.forEach((track, idx) => {
       const points = trackPointsMap[track.id] || [];
-      const validPoints = points.filter(
-        (p) => p.longitude != null && p.latitude != null
-      );
+      const validPoints = points.filter((p) => p.longitude != null && p.latitude != null);
       if (validPoints.length < 2) return;
 
       const color = TRACK_COLORS[idx % TRACK_COLORS.length];
@@ -262,9 +310,7 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
 
     tracks.forEach((track, idx) => {
       const points = trackPointsMap[track.id] || [];
-      const firstPoint = points.find(
-        (p) => p.longitude != null && p.latitude != null
-      );
+      const firstPoint = points.find((p) => p.longitude != null && p.latitude != null);
       if (!firstPoint) return;
 
       const color = TRACK_COLORS[idx % TRACK_COLORS.length];
@@ -323,21 +369,109 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
     (currentTimeMs: number) => {
       const newPointInfo: Record<number, TrackPoint> = {};
 
-      tracks.forEach((track) => {
-        const points = trackPointsMap[track.id] || [];
-        const marker = markerRefs.current[track.id];
-        if (!marker || points.length === 0) return;
+      if (!pixelMode) {
+        tracks.forEach((track) => {
+          const points = trackPointsMap[track.id] || [];
+          const marker = markerRefs.current[track.id];
+          if (!marker || points.length === 0) return;
 
-        const point = getPointAtTime(points, currentTimeMs);
-        if (point && point.longitude != null && point.latitude != null) {
-          marker.setLatLng([point.latitude, point.longitude]);
-          newPointInfo[track.id] = point;
-        }
-      });
+          const { x: lng, y: lat, point } = interpolatePoint(points, currentTimeMs, true);
+          if (point && lng != null && lat != null) {
+            marker.setLatLng([lat, lng]);
+            newPointInfo[track.id] = point;
+          }
+        });
+      }
 
       setCurrentPointInfo(newPointInfo);
     },
-    [tracks, trackPointsMap, getPointAtTime]
+    [tracks, trackPointsMap, interpolatePoint, pixelMode]
+  );
+
+  const drawPixelCanvas = useCallback(
+    (currentTimeMs: number) => {
+      if (!canvasRef.current) return;
+      const ctx = canvasRef.current.getContext('2d');
+      if (!ctx) return;
+      canvasCtxRef.current = ctx;
+
+      const w = canvasRef.current.width;
+      const h = canvasRef.current.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.strokeStyle = '#f0f0f0';
+      ctx.lineWidth = 1;
+      const gridStep = 20;
+      for (let x = 0; x <= w; x += gridStep) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= h; y += gridStep) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      const padding = 24;
+      const plotW = w - padding * 2;
+      const plotH = h - padding * 2;
+
+      tracks.forEach((track, idx) => {
+        const points = trackPointsMap[track.id] || [];
+        const validPoints = points.filter((p) => p.pixelX != null && p.pixelY != null);
+        if (validPoints.length === 0) return;
+
+        const color = TRACK_COLORS[idx % TRACK_COLORS.length];
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        validPoints.forEach((p, i) => {
+          const px = padding + (p.pixelX as number) * plotW;
+          const py = padding + (p.pixelY as number) * plotH;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        const { x: curX, y: curY } = interpolatePoint(points, currentTimeMs, false);
+        const markerX = padding + curX * plotW;
+        const markerY = padding + curY * plotH;
+
+        ctx.beginPath();
+        ctx.arc(markerX, markerY, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(markerX, markerY, 12, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+
+      ctx.fillStyle = '#ff4d4f';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('起点 (0,0)', 4, h - 4);
+      ctx.fillText('终点 (1,1)', w - 70, 14);
+      ctx.fillStyle = '#666';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('像素坐标系 (归一化)', w / 2 - 50, 14);
+    },
+    [tracks, trackPointsMap, interpolatePoint]
   );
 
   const animate = useCallback(
@@ -346,13 +480,14 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
 
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
+        animationRef.current = requestAnimationFrame(animate);
+        return;
       }
 
       const delta = timestamp - lastTimeRef.current;
       lastTimeRef.current = timestamp;
 
-      const speedMultiplier = playState.speed * 1000;
-      const newTime = playState.currentTime + delta * speedMultiplier;
+      const newTime = playState.currentTime + delta * playState.speed;
 
       if (newTime >= timeRange.endTime) {
         setPlayState((prev) => ({
@@ -362,6 +497,19 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
           progress: 100,
         }));
         updateMarkerPositions(timeRange.endTime);
+        if (pixelMode) drawPixelCanvas(timeRange.endTime);
+        return;
+      }
+
+      if (newTime < timeRange.startTime) {
+        setPlayState((prev) => ({
+          ...prev,
+          currentTime: timeRange.startTime,
+          progress: 0,
+        }));
+        updateMarkerPositions(timeRange.startTime);
+        if (pixelMode) drawPixelCanvas(timeRange.startTime);
+        animationRef.current = requestAnimationFrame(animate);
         return;
       }
 
@@ -375,10 +523,11 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
         progress,
       }));
       updateMarkerPositions(newTime);
+      if (pixelMode) drawPixelCanvas(newTime);
 
       animationRef.current = requestAnimationFrame(animate);
     },
-    [playState.isPlaying, playState.currentTime, playState.speed, timeRange, updateMarkerPositions]
+    [playState.isPlaying, playState.currentTime, playState.speed, timeRange, updateMarkerPositions, pixelMode, drawPixelCanvas]
   );
 
   useEffect(() => {
@@ -397,11 +546,30 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
   }, [playState.isPlaying, animate]);
 
   useEffect(() => {
-    initMap();
-  }, [initMap]);
+    if (!pixelMode) {
+      initLeafletMap();
+    } else {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        eventMarkerRef.current = null;
+        polylineRefs.current = {};
+        markerRefs.current = {};
+      }
+    }
+  }, [initLeafletMap, pixelMode]);
 
   useEffect(() => {
-    if (mapInstanceRef.current) {
+    if (pixelMode) {
+      if (timeRange.duration > 0) {
+        const startT = Math.max(timeRange.startTime, parseTime(allPoints[0]?.frameTime));
+        setPlayState((prev) => ({
+          ...prev,
+          currentTime: startT,
+        }));
+        drawPixelCanvas(startT);
+      }
+    } else if (mapInstanceRef.current) {
       setTimeout(() => {
         mapInstanceRef.current?.invalidateSize();
         drawTrackPolylines();
@@ -426,6 +594,9 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
     timeRange.startTime,
     timeRange.duration,
     updateMarkerPositions,
+    pixelMode,
+    drawPixelCanvas,
+    allPoints,
   ]);
 
   const handlePlayPause = () => {
@@ -449,6 +620,7 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
       progress: 0,
     });
     updateMarkerPositions(timeRange.startTime);
+    if (pixelMode) drawPixelCanvas(timeRange.startTime);
   };
 
   const handleSpeedChange = (speed: number) => {
@@ -463,6 +635,7 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
       currentTime: newTime,
     }));
     updateMarkerPositions(newTime);
+    if (pixelMode) drawPixelCanvas(newTime);
   };
 
   const formatTime = (ms: number) => {
@@ -473,19 +646,61 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
 
   const getTrackColor = (index: number) => TRACK_COLORS[index % TRACK_COLORS.length];
 
-  if (!hasValidPoints) {
+  const canUseGps = hasValidGpsPoints;
+  const canUsePixel = hasValidPixelPoints;
+  const showModeSwitch = canUseGps && canUsePixel;
+
+  if (!canUseGps && !canUsePixel) {
     return (
       <Card size="small" style={{ height }}>
-        <Empty
-          description="暂无GPS轨迹数据"
-          style={{ marginTop: height / 4 }}
-        />
+        <Empty description="暂无轨迹数据" style={{ marginTop: height / 4 }} />
       </Card>
     );
   }
 
-  return (
-    <div>
+  const renderMainArea = () => {
+    if (pixelMode) {
+      return (
+        <div
+          style={{
+            width: '100%',
+            height,
+            borderRadius: 8,
+            overflow: 'hidden',
+            border: '1px solid #e8e8e8',
+            marginBottom: 12,
+            background: '#fafafa',
+            position: 'relative',
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            width={800}
+            height={height - 0}
+            style={{ width: '100%', height: '100%', display: 'block' }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              background: 'rgba(255,255,255,0.9)',
+              padding: '4px 10px',
+              borderRadius: 4,
+              fontSize: 12,
+              color: '#666',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <VideoCameraOutlined /> 像素轨迹回放模式
+          </div>
+        </div>
+      );
+    }
+
+    return (
       <div
         ref={mapRef}
         style={{
@@ -497,6 +712,46 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
           marginBottom: 12,
         }}
       />
+    );
+  };
+
+  return (
+    <div>
+      {showModeSwitch && (
+        <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
+          <Segmented
+            value={pixelMode ? 'pixel' : 'gps'}
+            onChange={(v) => {
+              setPixelMode(v === 'pixel');
+              setPlayState((prev) => ({ ...prev, isPlaying: false }));
+            }}
+            options={[
+              { label: (
+                <Space size={4}>
+                  <EnvironmentOutlined /> GPS地图
+                </Space>
+              ), value: 'gps', disabled: !canUseGps },
+              { label: (
+                <Space size={4}>
+                  <VideoCameraOutlined /> 像素坐标
+                </Space>
+              ), value: 'pixel', disabled: !canUsePixel },
+            ]}
+          />
+        </div>
+      )}
+
+      {!canUseGps && pixelMode && hasValidWindow && (
+        <Alert
+          type="info"
+          showIcon
+          message="当前为像素轨迹回放"
+          description="事件关联轨迹未包含GPS坐标，使用视频像素坐标系进行轨迹回放。回放窗口严格限定为事件前5分钟。"
+          style={{ marginBottom: 8 }}
+        />
+      )}
+
+      {renderMainArea()}
 
       <Card size="small" style={{ borderRadius: 8 }}>
         <Row gutter={16} align="middle">
@@ -571,10 +826,10 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
               title={
                 <Space size={4}>
                   <EnvironmentOutlined style={{ color: '#52c41a' }} />
-                  回放时长
+                  回放窗口
                 </Space>
               }
-              value={`${beforeMinutes} 分钟`}
+              value={`前 ${beforeMinutes} 分钟`}
               valueStyle={{ fontSize: 14, fontWeight: 600 }}
             />
           </Col>
@@ -619,7 +874,7 @@ const TrackReplayMap: React.FC<TrackReplayMapProps> = ({
                       {speed != null && (
                         <Tooltip title="当前速度">
                           <span style={{ fontSize: 11, opacity: 0.8 }}>
-                            {speed.toFixed(1)} km/h
+                            {Number(speed).toFixed(1)} km/h
                           </span>
                         </Tooltip>
                       )}

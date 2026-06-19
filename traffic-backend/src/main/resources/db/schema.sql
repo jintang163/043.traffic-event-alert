@@ -330,6 +330,8 @@ CREATE TABLE IF NOT EXISTS track_point (
     bbox_confidence DECIMAL(5,4),
     longitude DECIMAL(10,6) COMMENT 'GPS坐标(可选)',
     latitude DECIMAL(10,6),
+    geom POINT COMMENT '空间坐标字段(MySQL GIS)',
+    geom_pixel POINT COMMENT '像素坐标空间字段(归一化0~1)',
     pixel_x DECIMAL(6,4) COMMENT '归一化像素x 0~1',
     pixel_y DECIMAL(6,4) COMMENT '归一化像素y 0~1',
     velocity_x DECIMAL(8,2) COMMENT '速度向量',
@@ -345,7 +347,10 @@ CREATE TABLE IF NOT EXISTS track_point (
     INDEX idx_track_id (track_id),
     INDEX idx_camera_id (camera_id),
     INDEX idx_frame_time (frame_time),
-    INDEX idx_key_point (is_key_point)
+    INDEX idx_key_point (is_key_point),
+    INDEX idx_track_time (track_id, frame_time) COMMENT '轨迹+时间复合索引，加速时间窗查询',
+    SPATIAL INDEX idx_geom (geom) COMMENT '空间索引，加速空间范围查询',
+    SPATIAL INDEX idx_geom_pixel (geom_pixel) COMMENT '像素空间索引'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS track_match_log (

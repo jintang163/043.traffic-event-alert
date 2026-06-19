@@ -197,15 +197,21 @@ const EventReplayModal: React.FC<EventReplayModalProps> = ({ open, event, onClos
                     tracks={replayData.tracks}
                     trackPointsMap={replayData.trackPointsMap}
                     beforeMinutes={replayData.beforeMinutes}
+                    startTimeStr={replayData.startTime}
+                    endTimeStr={replayData.endTime}
                     height={420}
                   />
                 ) : (
-                  <Card
-                    size="small"
-                    style={{ height: 420, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Empty description="暂无GPS轨迹坐标数据，仅像素轨迹可用" />
-                  </Card>
+                  <TrackReplayMap
+                    event={replayData.event}
+                    tracks={replayData.tracks}
+                    trackPointsMap={replayData.trackPointsMap}
+                    beforeMinutes={replayData.beforeMinutes}
+                    startTimeStr={replayData.startTime}
+                    endTimeStr={replayData.endTime}
+                    height={420}
+                    pixelMode
+                  />
                 )}
 
                 <Card size="small" style={{ marginTop: 12, borderRadius: 8 }}>

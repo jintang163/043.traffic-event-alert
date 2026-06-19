@@ -91,10 +91,7 @@ public class GlobalTrackService {
     }
 
     public List<TrackPoint> listTrackPoints(Long trackId) {
-        LambdaQueryWrapper<TrackPoint> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(TrackPoint::getTrackId, trackId)
-                .orderByAsc(TrackPoint::getFrameTime);
-        return trackPointMapper.selectList(wrapper);
+        return trackPointMapper.selectAllByTrackId(trackId);
     }
 
     public List<TrackPoint> listKeyPoints(Long trackId) {
@@ -147,7 +144,7 @@ public class GlobalTrackService {
 
     @Transactional
     public TrackPoint addTrackPoint(TrackPoint point) {
-        trackPointMapper.insert(point);
+        trackPointMapper.insertWithGeom(point);
 
         GlobalTrack track = getById(point.getTrackId());
         if (track != null) {
@@ -379,7 +376,7 @@ public class GlobalTrackService {
     public int batchAddTrackPoints(List<TrackPoint> points) {
         if (points == null || points.isEmpty()) return 0;
         for (TrackPoint p : points) {
-            trackPointMapper.insert(p);
+            trackPointMapper.insertWithGeom(p);
         }
 
         Set<Long> trackIds = new HashSet<>();
@@ -491,18 +488,23 @@ public class GlobalTrackService {
         }
 
         List<EventTrackLink> links = listEventLinks(eventId);
+
+        LocalDateTime eventTime = event.getEventTime();
+        int safeBeforeMinutes = Math.max(1, Math.min(30, beforeMinutes));
+        LocalDateTime startTime = eventTime.minusMinutes(safeBeforeMinutes);
+        LocalDateTime endTime = eventTime;
+
         if (links.isEmpty()) {
             return Map.of(
                     "event", event,
                     "tracks", Collections.emptyList(),
                     "trackPointsMap", Collections.emptyMap(),
-                    "beforeMinutes", beforeMinutes
+                    "beforeMinutes", safeBeforeMinutes,
+                    "startTime", startTime,
+                    "endTime", endTime,
+                    "windowSeconds", (int) java.time.Duration.between(startTime, endTime).getSeconds()
             );
         }
-
-        LocalDateTime eventTime = event.getEventTime();
-        LocalDateTime startTime = eventTime.minusMinutes(beforeMinutes);
-        LocalDateTime endTime = eventTime.plusMinutes(1);
 
         List<GlobalTrack> tracks = new ArrayList<>();
         Map<Long, List<TrackPoint>> trackPointsMap = new LinkedHashMap<>();
@@ -511,13 +513,9 @@ public class GlobalTrackService {
             GlobalTrack track = getById(link.getTrackId());
             if (track != null) {
                 tracks.add(track);
-
-                LambdaQueryWrapper<TrackPoint> pointWrapper = new LambdaQueryWrapper<>();
-                pointWrapper.eq(TrackPoint::getTrackId, link.getTrackId())
-                        .ge(TrackPoint::getFrameTime, startTime)
-                        .le(TrackPoint::getFrameTime, endTime)
-                        .orderByAsc(TrackPoint::getFrameTime);
-                List<TrackPoint> points = trackPointMapper.selectList(pointWrapper);
+                List<TrackPoint> points = trackPointMapper.selectByTrackAndTimeRange(
+                        link.getTrackId(), startTime, endTime
+                );
                 trackPointsMap.put(link.getTrackId(), points);
             }
         }
@@ -526,19 +524,15 @@ public class GlobalTrackService {
                 "event", event,
                 "tracks", tracks,
                 "trackPointsMap", trackPointsMap,
-                "beforeMinutes", beforeMinutes,
+                "beforeMinutes", safeBeforeMinutes,
                 "startTime", startTime,
-                "endTime", eventTime
+                "endTime", endTime,
+                "windowSeconds", (int) java.time.Duration.between(startTime, endTime).getSeconds()
         );
     }
 
     public List<TrackPoint> listTrackPointsByTimeRange(Long trackId, LocalDateTime startTime, LocalDateTime endTime) {
-        LambdaQueryWrapper<TrackPoint> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(TrackPoint::getTrackId, trackId)
-                .ge(TrackPoint::getFrameTime, startTime)
-                .le(TrackPoint::getFrameTime, endTime)
-                .orderByAsc(TrackPoint::getFrameTime);
-        return trackPointMapper.selectList(wrapper);
+        return trackPointMapper.selectByTrackAndTimeRange(trackId, startTime, endTime);
     }
 
     public GlobalTrack findOrCreateTrackFromEvent(String licensePlate, String reidFeature,

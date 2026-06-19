@@ -10,6 +10,7 @@ import com.traffic.alert.dto.FalsePositiveRequest;
 import com.traffic.alert.entity.AlertEvent;
 import com.traffic.alert.entity.Camera;
 import com.traffic.alert.entity.Department;
+import com.traffic.alert.entity.TrackPoint;
 import com.traffic.alert.entity.WorkOrder;
 import com.traffic.alert.enums.DebrisCategory;
 import com.traffic.alert.mapper.AlertEventMapper;
@@ -203,9 +204,9 @@ public class AlertEventService {
             log.warn("===== 重大事故优先响应完成: eventNo={} =====", eventNo);
         }
 
-        if (request.getTrackData() != null && !request.getTrackData().isEmpty()) {
+        if (request.getTrackData() != null || (request.getLicensePlates() != null && !request.getLicensePlates().isEmpty())) {
             try {
-                linkEventToTracks(event, request.getTrackData(), camera);
+                linkEventToTracks(event, request.getTrackData(), request.getLicensePlates(), camera);
             } catch (Exception e) {
                 log.warn("关联告警事件与轨迹失败: eventNo={}, error={}", eventNo, e.getMessage());
             }
@@ -326,42 +327,257 @@ public class AlertEventService {
         return results;
     }
 
-    private void linkEventToTracks(AlertEvent event, List<Map<String, Object>> trackData, Camera camera) {
+    private void linkEventToTracks(AlertEvent event, List<Map<String, Object>> trackData,
+                                   List<Map<String, Object>> licensePlates, Camera camera) {
+        if (trackData == null || trackData.isEmpty()) {
+            log.debug("无轨迹数据，尝试基于车牌识别结果自动关联: eventNo={}", event.getEventNo());
+            linkTracksByLicensePlates(event, licensePlates, camera);
+            return;
+        }
+
         int linkedCount = 0;
-        for (Map<String, Object> track : trackData) {
+        int createdTrackPoints = 0;
+        LocalDateTime eventTime = event.getEventTime();
+
+        for (int i = 0; i < trackData.size(); i++) {
+            Map<String, Object> track = trackData.get(i);
             String plate = null;
+            String reidFeature = null;
             String className = null;
             Integer localTrackId = null;
-
-            if (track.get("trackId") != null) {
-                localTrackId = ((Number) track.get("trackId")).intValue();
-            }
-            if (track.get("className") != null) {
-                className = track.get("className").toString();
-            }
+            BigDecimal pixelX = null;
+            BigDecimal pixelY = null;
+            BigDecimal longitude = null;
+            BigDecimal latitude = null;
+            BigDecimal speed = null;
+            BigDecimal direction = null;
+            BigDecimal bboxConfidence = null;
+            Integer bboxX1 = null, bboxY1 = null, bboxX2 = null, bboxY2 = null;
+            Integer isKeyPoint = 0;
+            Integer keyPointType = 3;
+            Long frameNo = null;
 
             try {
-                var gt = globalTrackService.findOrCreateTrackFromEvent(
-                        plate, null, className,
-                        camera.getId(), camera.getCameraName(),
-                        event.getEventTime()
+                Object o;
+                if ((o = track.get("plateNumber")) != null || (o = track.get("plate_number")) != null || (o = track.get("licensePlate")) != null) {
+                    plate = o.toString();
+                }
+                if ((o = track.get("reidFeature")) != null || (o = track.get("reid_feature")) != null) {
+                    reidFeature = o.toString();
+                }
+                if ((o = track.get("className")) != null || (o = track.get("class_name")) != null || (o = track.get("targetClass")) != null) {
+                    className = o.toString();
+                }
+                if ((o = track.get("trackId")) != null || (o = track.get("track_id")) != null || (o = track.get("localTrackId")) != null) {
+                    if (o instanceof Number) localTrackId = ((Number) o).intValue();
+                }
+                if ((o = track.get("pixelX")) != null || (o = track.get("pixel_x")) != null || (o = track.get("normX")) != null) {
+                    pixelX = new BigDecimal(o.toString());
+                }
+                if ((o = track.get("pixelY")) != null || (o = track.get("pixel_y")) != null || (o = track.get("normY")) != null) {
+                    pixelY = new BigDecimal(o.toString());
+                }
+                if ((o = track.get("longitude")) != null || (o = track.get("lng")) != null) {
+                    longitude = new BigDecimal(o.toString());
+                }
+                if ((o = track.get("latitude")) != null || (o = track.get("lat")) != null) {
+                    latitude = new BigDecimal(o.toString());
+                }
+                if ((o = track.get("speed")) != null) {
+                    speed = new BigDecimal(o.toString());
+                }
+                if ((o = track.get("direction")) != null || (o = track.get("heading")) != null) {
+                    direction = new BigDecimal(o.toString());
+                }
+                if ((o = track.get("bboxConfidence")) != null || (o = track.get("confidence")) != null) {
+                    bboxConfidence = new BigDecimal(o.toString());
+                }
+                if ((o = track.get("frameNo")) != null || (o = track.get("frame_no")) != null) {
+                    frameNo = Long.valueOf(o.toString());
+                }
+
+                Object bboxObj = track.get("bbox");
+                if (bboxObj instanceof List<?> bboxList && bboxList.size() >= 4) {
+                    try {
+                        bboxX1 = ((Number) bboxList.get(0)).intValue();
+                        bboxY1 = ((Number) bboxList.get(1)).intValue();
+                        bboxX2 = ((Number) bboxList.get(2)).intValue();
+                        bboxY2 = ((Number) bboxList.get(3)).intValue();
+                    } catch (Exception ignored) {}
+                } else {
+                    Object v;
+                    if ((v = track.get("bboxX1")) != null) bboxX1 = ((Number) v).intValue();
+                    if ((v = track.get("bboxY1")) != null) bboxY1 = ((Number) v).intValue();
+                    if ((v = track.get("bboxX2")) != null) bboxX2 = ((Number) v).intValue();
+                    if ((v = track.get("bboxY2")) != null) bboxY2 = ((Number) v).intValue();
+                }
+
+                if (longitude == null && latitude == null && camera.getLongitude() != null && pixelX != null && pixelY != null) {
+                    longitude = camera.getLongitude().add(pixelX.multiply(BigDecimal.valueOf(0.001)));
+                    latitude = camera.getLatitude().add(pixelY.multiply(BigDecimal.valueOf(0.001)));
+                }
+
+                GlobalTrack matchedTrack = globalTrackService.findMatchingTrack(
+                        plate, reidFeature, className,
+                        camera.getId(), 0.75
                 );
+
+                GlobalTrack gt;
+                int linkType = i == 0 ? 1 : 2;
+                if (matchedTrack != null) {
+                    gt = matchedTrack;
+                    log.debug("轨迹匹配成功: eventNo={}, trackNo={}, plate={}, i={}",
+                            event.getEventNo(), gt.getTrackNo(), plate, i);
+                } else {
+                    gt = globalTrackService.findOrCreateTrackFromEvent(
+                            plate, reidFeature, className,
+                            camera.getId(), camera.getCameraName(),
+                            eventTime.minusSeconds(5)
+                    );
+                    log.debug("创建新轨迹: eventNo={}, trackNo={}, plate={}",
+                            event.getEventNo(), gt != null ? gt.getTrackNo() : null, plate);
+                }
+
                 if (gt != null) {
+                    TrackPoint tp = new TrackPoint();
+                    tp.setTrackId(gt.getId());
+                    tp.setCameraId(camera.getId());
+                    tp.setCameraName(camera.getCameraName());
+                    tp.setFrameNo(frameNo);
+                    tp.setFrameTime(eventTime);
+                    tp.setBboxX1(bboxX1);
+                    tp.setBboxY1(bboxY1);
+                    tp.setBboxX2(bboxX2);
+                    tp.setBboxY2(bboxY2);
+                    tp.setBboxConfidence(bboxConfidence);
+                    tp.setLongitude(longitude);
+                    tp.setLatitude(latitude);
+                    tp.setPixelX(pixelX);
+                    tp.setPixelY(pixelY);
+                    tp.setSpeed(speed);
+                    tp.setDirection(direction);
+                    tp.setReidFeature(reidFeature);
+                    tp.setIsKeyPoint(isKeyPoint);
+                    tp.setKeyPointType(keyPointType);
+                    globalTrackService.addTrackPoint(tp);
+                    createdTrackPoints++;
+
                     globalTrackService.linkEventToTrack(
                             event.getId(), event.getEventNo(),
                             gt.getId(), gt.getTrackNo(),
-                            1, null,
-                            camera.getId(), null,
-                            "事件发生时自动关联"
+                            linkType, null,
+                            camera.getId(), tp.getId(),
+                            "事件发生时自动关联" + (matchedTrack != null ? "(匹配已有轨迹)" : "(新建轨迹)")
                     );
                     linkedCount++;
                 }
             } catch (Exception e) {
-                log.warn("关联单条轨迹失败: trackId={}, error={}", localTrackId, e.getMessage());
+                log.warn("关联单条轨迹失败: trackId={}, plate={}, error={}", localTrackId, plate, e.getMessage());
             }
         }
+
         if (linkedCount > 0) {
-            log.info("告警事件已关联{}条轨迹: eventNo={}", linkedCount, event.getEventNo());
+            log.info("告警事件已关联{}条轨迹(创建{}个轨迹点): eventNo={}", linkedCount, createdTrackPoints, event.getEventNo());
+        } else {
+            linkTracksByLicensePlates(event, licensePlates, camera);
+        }
+    }
+
+    private void linkTracksByLicensePlates(AlertEvent event, List<Map<String, Object>> plates, Camera camera) {
+        if (plates == null || plates.isEmpty()) return;
+
+        int linkedCount = 0;
+        LocalDateTime eventTime = event.getEventTime();
+
+        for (Map<String, Object> plateMap : plates) {
+            String plateNumber = null;
+            String vehicleType = null;
+            String vehicleColor = null;
+            BigDecimal pixelX = null;
+            BigDecimal pixelY = null;
+
+            Object o;
+            if ((o = plateMap.get("plateNumber")) != null || (o = plateMap.get("plate_number")) != null) {
+                plateNumber = o.toString();
+            }
+            if ((o = plateMap.get("vehicleType")) != null || (o = plateMap.get("vehicle_type")) != null) {
+                vehicleType = o.toString();
+            }
+            if ((o = plateMap.get("vehicleColor")) != null || (o = plateMap.get("vehicle_color")) != null) {
+                vehicleColor = o.toString();
+            }
+            Object bboxObj = plateMap.get("bbox");
+            if (bboxObj instanceof List<?> bboxList && bboxList.size() >= 4) {
+                try {
+                    int x1 = ((Number) bboxList.get(0)).intValue();
+                    int y1 = ((Number) bboxList.get(1)).intValue();
+                    int x2 = ((Number) bboxList.get(2)).intValue();
+                    int y2 = ((Number) bboxList.get(3)).intValue();
+                    pixelX = BigDecimal.valueOf((x1 + x2) / 2.0 / 1920.0);
+                    pixelY = BigDecimal.valueOf((y1 + y2) / 2.0 / 1080.0);
+                } catch (Exception ignored) {}
+            }
+
+            if (plateNumber == null || plateNumber.isEmpty()) continue;
+
+            try {
+                String targetClass = vehicleType != null ? switch (vehicleType) {
+                    case "小车", "轿车", "SUV", "car", "sedan", "小型汽车" -> "car";
+                    case "货车", "truck", "大型汽车", "重型货车" -> "truck";
+                    case "公交车", "bus", "大客车" -> "bus";
+                    case "摩托车", "motorcycle", "摩托" -> "motorcycle";
+                    default -> "car";
+                } : "car";
+
+                GlobalTrack matched = globalTrackService.findMatchingTrack(
+                        plateNumber, null, targetClass, camera.getId(), 0.85
+                );
+
+                GlobalTrack gt;
+                if (matched != null) {
+                    gt = matched;
+                } else {
+                    gt = globalTrackService.findOrCreateTrackFromEvent(
+                            plateNumber, null, targetClass,
+                            camera.getId(), camera.getCameraName(),
+                            eventTime.minusSeconds(3)
+                    );
+                }
+
+                if (gt != null) {
+                    TrackPoint tp = new TrackPoint();
+                    tp.setTrackId(gt.getId());
+                    tp.setCameraId(camera.getId());
+                    tp.setCameraName(camera.getCameraName());
+                    tp.setFrameTime(eventTime);
+                    tp.setLongitude(camera.getLongitude());
+                    tp.setLatitude(camera.getLatitude());
+                    tp.setPixelX(pixelX);
+                    tp.setPixelY(pixelY);
+                    tp.setIsKeyPoint(1);
+                    tp.setKeyPointType(3);
+                    if (vehicleColor != null && gt.getColor() == null) {
+                        gt.setColor(vehicleColor);
+                        globalTrackService.updateTrack(gt);
+                    }
+                    globalTrackService.addTrackPoint(tp);
+
+                    globalTrackService.linkEventToTrack(
+                            event.getId(), event.getEventNo(),
+                            gt.getId(), gt.getTrackNo(),
+                            linkedCount == 0 ? 1 : 2, null,
+                            camera.getId(), tp.getId(),
+                            "基于车牌识别自动关联" + (matched != null ? "(匹配已有轨迹)" : "(新建轨迹)")
+                    );
+                    linkedCount++;
+                }
+            } catch (Exception e) {
+                log.warn("基于车牌关联轨迹失败: plate={}, error={}", plateNumber, e.getMessage());
+            }
+        }
+
+        if (linkedCount > 0) {
+            log.info("基于车牌识别已关联{}条轨迹: eventNo={}", linkedCount, event.getEventNo());
         }
     }
 

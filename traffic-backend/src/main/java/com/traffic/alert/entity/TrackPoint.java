@@ -1,5 +1,6 @@
 package com.traffic.alert.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -24,6 +25,13 @@ public class TrackPoint extends BaseEntity {
     private BigDecimal bboxConfidence;
     private BigDecimal longitude;
     private BigDecimal latitude;
+
+    @TableField(exist = false)
+    private String geomWkt;
+
+    @TableField(exist = false)
+    private String geomPixelWkt;
+
     private BigDecimal pixelX;
     private BigDecimal pixelY;
     private BigDecimal velocityX;
