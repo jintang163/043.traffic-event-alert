@@ -39,13 +39,11 @@ public interface EventPredictionMapper extends BaseMapper<EventPrediction> {
             "WHERE ep.prediction_time = (" +
             "    SELECT MAX(prediction_time) FROM event_prediction " +
             "    WHERE status = 1 AND deleted = 0 " +
-            "    AND target_start_time BETWEEN #{startTime} AND #{endTime}" +
+            "    AND target_end_time > #{now}" +
             ") " +
             "AND ep.status = 1 AND ep.deleted = 0 " +
             "ORDER BY ep.risk_score DESC")
-    List<EventPrediction> selectLatestByTimeRangeWithGeom(
-            @Param("startTime") LocalDateTime startTime,
-            @Param("endTime") LocalDateTime endTime);
+    List<EventPrediction> selectLatestValidWithGeom(@Param("now") LocalDateTime now);
 
     @Select("SELECT * FROM event_prediction " +
             "WHERE camera_id = #{cameraId} " +

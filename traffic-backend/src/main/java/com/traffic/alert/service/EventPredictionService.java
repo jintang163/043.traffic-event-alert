@@ -12,6 +12,7 @@ import com.traffic.alert.mapper.EventPredictionMapper;
 import com.traffic.alert.mapper.WeatherDataMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +54,9 @@ public class EventPredictionService {
         WEATHER_WEIGHTS.put("HAZE", new BigDecimal("1.5"));
     }
 
+    private static final String[] WEATHER_TYPES = {"SUNNY", "CLOUDY", "RAIN", "FOG", "HAZE"};
+    private static final Random RANDOM = new Random();
+
     public EventPrediction getById(Long id) {
         return predictionMapper.selectById(id);
     }
@@ -73,13 +77,134 @@ public class EventPredictionService {
     }
 
     public List<EventPrediction> getPredictions(LocalDateTime startTime, LocalDateTime endTime) {
-        return predictionMapper.selectLatestByTimeRangeWithGeom(startTime, endTime);
+        return predictionMapper.selectByTimeRangeWithGeom(startTime, endTime);
     }
 
     public List<EventPrediction> getPredictionsForNextHour() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime endTime = now.plusHours(1);
-        return predictionMapper.selectLatestByTimeRangeWithGeom(now, endTime);
+        List<EventPrediction> predictions = predictionMapper.selectLatestValidWithGeom(now);
+
+        if (predictions.isEmpty()) {
+            log.warn("暂无有效预测数据，触发生成");
+            return generatePredictions(1);
+        }
+
+        return predictions;
+    }
+
+    @Scheduled(cron = "0 */15 * * * ?")
+    public void scheduledPrediction() {
+        log.info("定时任务：开始生成交通事件预测...");
+        try {
+            generatePredictions(1);
+            log.info("定时任务：预测生成完成");
+        } catch (Exception e) {
+            log.error("定时任务：预测生成失败", e);
+        }
+    }
+
+    @Scheduled(cron = "0 0 * * * ?")
+    public void scheduledWeatherUpdate() {
+        log.info("定时任务：开始更新天气数据...");
+        try {
+            simulateWeatherUpdate();
+            log.info("定时任务：天气数据更新完成");
+        } catch (Exception e) {
+            log.error("定时任务：天气更新失败", e);
+        }
+    }
+
+    @Transactional
+    public void simulateWeatherUpdate() {
+        List<Camera> cameras = cameraService.list();
+        if (cameras.isEmpty()) {
+            log.warn("没有摄像头数据，无法生成区域天气");
+            return;
+        }
+
+        LocalDateTime recordTime = LocalDateTime.now();
+
+        BigDecimal centerLng = cameras.stream()
+                .filter(c -> c.getLongitude() != null)
+                .map(Camera::getLongitude)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(cameras.stream().filter(c -> c.getLongitude() != null).count()), 6, RoundingMode.HALF_UP);
+
+        BigDecimal centerLat = cameras.stream()
+                .filter(c -> c.getLatitude() != null)
+                .map(Camera::getLatitude)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(cameras.stream().filter(c -> c.getLatitude() != null).count()), 6, RoundingMode.HALF_UP);
+
+        String baseWeather = WEATHER_TYPES[RANDOM.nextInt(WEATHER_TYPES.length)];
+        BigDecimal baseTemp = BigDecimal.valueOf(20 + RANDOM.nextDouble() * 15);
+        BigDecimal baseHumidity = BigDecimal.valueOf(40 + RANDOM.nextDouble() * 40);
+
+        int regionCount = Math.min(5, cameras.size());
+        Set<String> createdRegions = new HashSet<>();
+        int regionIndex = 0;
+
+        for (Camera camera : cameras) {
+            if (camera.getLongitude() == null || camera.getLatitude() == null) continue;
+
+            String regionCode = "REGION_" + (regionIndex % regionCount);
+            if (createdRegions.contains(regionCode)) {
+                regionIndex++;
+                continue;
+            }
+            createdRegions.add(regionCode);
+
+            double lngOffset = (RANDOM.nextDouble() - 0.5) * 0.02;
+            double latOffset = (RANDOM.nextDouble() - 0.5) * 0.02;
+            BigDecimal regionLng = camera.getLongitude().add(BigDecimal.valueOf(lngOffset));
+            BigDecimal regionLat = camera.getLatitude().add(BigDecimal.valueOf(latOffset));
+
+            String weatherType = RANDOM.nextDouble() < 0.7 ? baseWeather : WEATHER_TYPES[RANDOM.nextInt(WEATHER_TYPES.length)];
+            BigDecimal temperature = baseTemp.add(BigDecimal.valueOf((RANDOM.nextDouble() - 0.5) * 4));
+            BigDecimal humidity = baseHumidity.add(BigDecimal.valueOf((RANDOM.nextDouble() - 0.5) * 10));
+            BigDecimal windSpeed = BigDecimal.valueOf(1 + RANDOM.nextDouble() * 8);
+            BigDecimal visibility = calculateVisibility(weatherType);
+            BigDecimal precipitation = calculatePrecipitation(weatherType);
+
+            WeatherData weather = new WeatherData();
+            weather.setRecordTime(recordTime);
+            weather.setLocationCode(regionCode);
+            weather.setLocationName(camera.getRoadName() != null ? camera.getRoadName() + "区域" : regionCode + "区域");
+            weather.setLongitude(regionLng);
+            weather.setLatitude(regionLat);
+            weather.setWeatherType(weatherType);
+            weather.setTemperature(temperature);
+            weather.setHumidity(humidity);
+            weather.setWindSpeed(windSpeed);
+            weather.setWindDirection(RANDOM.nextInt(360));
+            weather.setVisibility(visibility);
+            weather.setPrecipitation(precipitation);
+            weatherDataMapper.insert(weather);
+
+            regionIndex++;
+        }
+
+        log.info("生成 {} 个区域的模拟天气数据，基准天气: {}", createdRegions.size(), baseWeather);
+    }
+
+    private BigDecimal calculateVisibility(String weatherType) {
+        return switch (weatherType) {
+            case "SUNNY" -> BigDecimal.valueOf(10 + RANDOM.nextDouble() * 10);
+            case "CLOUDY" -> BigDecimal.valueOf(8 + RANDOM.nextDouble() * 7);
+            case "RAIN" -> BigDecimal.valueOf(2 + RANDOM.nextDouble() * 4);
+            case "SNOW" -> BigDecimal.valueOf(1 + RANDOM.nextDouble() * 3);
+            case "FOG" -> BigDecimal.valueOf(0.2 + RANDOM.nextDouble() * 0.8);
+            case "HAZE" -> BigDecimal.valueOf(0.5 + RANDOM.nextDouble() * 1.5);
+            default -> BigDecimal.valueOf(10);
+        };
+    }
+
+    private BigDecimal calculatePrecipitation(String weatherType) {
+        return switch (weatherType) {
+            case "RAIN" -> BigDecimal.valueOf(2 + RANDOM.nextDouble() * 15);
+            case "SNOW" -> BigDecimal.valueOf(1 + RANDOM.nextDouble() * 8);
+            default -> BigDecimal.ZERO;
+        };
     }
 
     @Transactional
@@ -88,7 +213,13 @@ public class EventPredictionService {
         LocalDateTime targetStart = predictionTime;
         LocalDateTime targetEnd = predictionTime.plusHours(targetHours);
 
-        WeatherData currentWeather = weatherDataMapper.selectLatest("DEFAULT");
+        List<WeatherData> allWeather = weatherDataMapper.selectAllLatest();
+        if (allWeather.isEmpty()) {
+            log.info("天气数据为空，先生成模拟天气数据");
+            simulateWeatherUpdate();
+            allWeather = weatherDataMapper.selectAllLatest();
+        }
+
         List<Camera> cameras = cameraService.list();
         Map<Long, List<AlertEvent>> historicalEvents = getHistoricalEvents(cameras, targetStart);
 
@@ -97,9 +228,11 @@ public class EventPredictionService {
 
         for (int i = 0; i < cameras.size(); i++) {
             Camera camera = cameras.get(i);
+            WeatherData nearestWeather = findNearestWeather(camera, allWeather);
+
             EventPrediction prediction = calculateRisk(
                     camera, historicalEvents.get(camera.getId()),
-                    currentWeather, targetStart, targetEnd, targetHours,
+                    nearestWeather, targetStart, targetEnd, targetHours,
                     basePredictionNo, i
             );
             if (prediction != null) {
@@ -113,6 +246,33 @@ public class EventPredictionService {
         }
 
         return predictions;
+    }
+
+    private WeatherData findNearestWeather(Camera camera, List<WeatherData> weatherList) {
+        if (weatherList == null || weatherList.isEmpty() || camera.getLongitude() == null || camera.getLatitude() == null) {
+            return null;
+        }
+
+        WeatherData nearest = null;
+        double minDistance = Double.MAX_VALUE;
+
+        double camLng = camera.getLongitude().doubleValue();
+        double camLat = camera.getLatitude().doubleValue();
+
+        for (WeatherData weather : weatherList) {
+            if (weather.getLongitude() == null || weather.getLatitude() == null) continue;
+
+            double wLng = weather.getLongitude().doubleValue();
+            double wLat = weather.getLatitude().doubleValue();
+
+            double distance = Math.sqrt(Math.pow(camLng - wLng, 2) + Math.pow(camLat - wLat, 2));
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearest = weather;
+            }
+        }
+
+        return nearest;
     }
 
     private EventPrediction calculateRisk(Camera camera, List<AlertEvent> historicalEvents,
@@ -186,12 +346,15 @@ public class EventPredictionService {
         features.put("isHoliday", isHoliday);
         features.put("isWeekend", isWeekend);
         features.put("weather", weather != null ? weather.getWeatherType() : "UNKNOWN");
+        features.put("weatherLocation", weather != null ? weather.getLocationName() : null);
         features.put("temperature", weather != null ? weather.getTemperature() : null);
         features.put("historicalEventCount", historicalEvents != null ? historicalEvents.size() : 0);
         prediction.setFeatureJson(com.alibaba.fastjson2.JSON.toJSONString(features));
 
-        prediction.setDescription(String.format("基于历史数据和当前条件，%s路段未来%d小时内发生%s的概率为%.1f%%",
-                camera.getCameraName(), targetHours, eventTypeLabel, probability.multiply(new BigDecimal("100"))));
+        prediction.setDescription(String.format("基于历史数据和%s区域天气，%s路段未来%d小时内发生%s的概率为%.1f%%",
+                weather != null ? weather.getLocationName() : "默认",
+                camera.getCameraName(), targetHours, eventTypeLabel,
+                probability.multiply(new BigDecimal("100"))));
 
         return prediction;
     }
@@ -356,10 +519,11 @@ public class EventPredictionService {
 
     public Map<String, Object> getPredictionSummary() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startTime = now;
-        LocalDateTime endTime = now.plusHours(1);
+        List<EventPrediction> predictions = predictionMapper.selectLatestValidWithGeom(now);
 
-        List<EventPrediction> predictions = predictionMapper.selectLatestByTimeRangeWithGeom(startTime, endTime);
+        if (predictions.isEmpty()) {
+            predictions = generatePredictions(1);
+        }
 
         Map<String, Object> summary = new HashMap<>();
         summary.put("totalPoints", predictions.size());

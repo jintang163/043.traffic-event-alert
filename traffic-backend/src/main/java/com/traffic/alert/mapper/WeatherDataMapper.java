@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,4 +29,15 @@ public interface WeatherDataMapper extends BaseMapper<WeatherData> {
             "ORDER BY record_time DESC " +
             "LIMIT 1")
     WeatherData selectLatest(@Param("locationCode") String locationCode);
+
+    @Select("SELECT * FROM weather_data " +
+            "WHERE record_time = (" +
+            "    SELECT MAX(record_time) FROM weather_data WHERE deleted = 0" +
+            ") " +
+            "AND deleted = 0 " +
+            "ORDER BY location_code")
+    List<WeatherData> selectAllLatest();
+
+    @Select("SELECT DISTINCT location_code FROM weather_data WHERE deleted = 0")
+    List<String> selectAllLocationCodes();
 }
