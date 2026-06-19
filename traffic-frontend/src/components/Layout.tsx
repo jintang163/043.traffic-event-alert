@@ -16,6 +16,9 @@ import {
   FileSearchOutlined,
   LineChartOutlined,
   PlayCircleOutlined,
+  NotificationOutlined,
+  MessageOutlined,
+  ScheduleOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -118,6 +121,38 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           key: '/rule-logs',
           icon: <FileSearchOutlined />,
           label: '执行日志',
+        },
+      ],
+    },
+    {
+      key: 'sub_notify',
+      icon: <NotificationOutlined />,
+      label: '告警推送',
+      children: [
+        {
+          key: '/notify-channels',
+          icon: <MessageOutlined />,
+          label: '推送渠道',
+        },
+        {
+          key: '/notify-templates',
+          icon: <SettingOutlined />,
+          label: '推送模板',
+        },
+        {
+          key: '/notify-rules',
+          icon: <BranchesOutlined />,
+          label: '推送规则',
+        },
+        {
+          key: '/on-duty',
+          icon: <ScheduleOutlined />,
+          label: '值班排班',
+        },
+        {
+          key: '/notify-logs',
+          icon: <FileSearchOutlined />,
+          label: '推送日志',
         },
       ],
     },

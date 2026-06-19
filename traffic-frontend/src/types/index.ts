@@ -690,3 +690,120 @@ export const AGGREGATE_TYPE_OPTIONS = [
   { value: 'hour', label: '小时' },
   { value: 'day', label: '日' },
 ];
+
+export interface NotifyChannel {
+  id?: number;
+  channelCode: string;
+  channelName: string;
+  channelType: string;
+  enabled: number;
+  configJson?: string;
+  description?: string;
+  sortOrder?: number;
+  createTime?: string;
+}
+
+export interface NotifyTemplate {
+  id?: number;
+  templateCode: string;
+  templateName: string;
+  channelType: string;
+  eventType?: string;
+  eventLevel?: number;
+  titleTemplate?: string;
+  contentTemplate: string;
+  status: number;
+  description?: string;
+  createTime?: string;
+}
+
+export interface NotifyRule {
+  id?: number;
+  ruleName: string;
+  eventType?: string;
+  eventLevel?: number;
+  channelId: number;
+  templateId?: number;
+  recipientType: number;
+  recipientIds?: string;
+  atAll?: number;
+  enabled: number;
+  priority?: number;
+  sortOrder?: number;
+  description?: string;
+  createTime?: string;
+}
+
+export interface NotifyLog {
+  id?: number;
+  logNo: string;
+  alertEventId?: number;
+  eventNo?: string;
+  channelId?: number;
+  channelType?: string;
+  templateId?: number;
+  recipientType?: number;
+  recipientInfo?: string;
+  title?: string;
+  content?: string;
+  sendStatus: number;
+  retryCount?: number;
+  maxRetry?: number;
+  nextRetryTime?: string;
+  responseBody?: string;
+  errorMessage?: string;
+  sendTime?: string;
+  successTime?: string;
+  costMs?: number;
+  createTime?: string;
+}
+
+export interface OnDuty {
+  id?: number;
+  userId: number;
+  userName?: string;
+  phone?: string;
+  deptId?: number;
+  deptName?: string;
+  dutyDate: string;
+  dutyType: number;
+  startTime?: string;
+  endTime?: string;
+  status: number;
+  remark?: string;
+  createTime?: string;
+}
+
+export const CHANNEL_TYPE_OPTIONS = [
+  { value: 'DINGTALK', label: '钉钉机器人', color: '#1890ff' },
+  { value: 'SMS', label: '阿里云短信', color: '#52c41a' },
+  { value: 'VOICE', label: '语音TTS外呼', color: '#ff4d4f' },
+  { value: 'WECHAT', label: '企业微信', color: '#722ed1' },
+];
+
+export const CHANNEL_TYPE_LABELS: Record<string, string> = {
+  DINGTALK: '钉钉机器人',
+  SMS: '阿里云短信',
+  VOICE: '语音TTS外呼',
+  WECHAT: '企业微信',
+};
+
+export const SEND_STATUS_LABELS: Record<number, { label: string; color: string }> = {
+  0: { label: '待发送', color: 'default' },
+  1: { label: '发送中', color: 'processing' },
+  2: { label: '成功', color: 'success' },
+  3: { label: '失败', color: 'error' },
+};
+
+export const RECIPIENT_TYPE_OPTIONS = [
+  { value: 1, label: '值班人员' },
+  { value: 2, label: '指定部门' },
+  { value: 3, label: '指定用户' },
+  { value: 4, label: '全部人员' },
+];
+
+export const DUTY_TYPE_OPTIONS = [
+  { value: 1, label: '白班' },
+  { value: 2, label: '夜班' },
+  { value: 3, label: '全天' },
+];

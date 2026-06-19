@@ -14,6 +14,11 @@ import EventVideos from '@/pages/EventVideos';
 import Rules from '@/pages/Rules';
 import DecisionTables from '@/pages/DecisionTables';
 import RuleExecutionLogs from '@/pages/RuleExecutionLogs';
+import NotifyChannels from '@/pages/NotifyChannels';
+import NotifyTemplates from '@/pages/NotifyTemplates';
+import NotifyRules from '@/pages/NotifyRules';
+import OnDutyPage from '@/pages/OnDuty';
+import NotifyLogs from '@/pages/NotifyLogs';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -142,6 +147,46 @@ export default function App() {
           element={
             <ProtectedRoute>
               <RuleExecutionLogs />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notify-channels"
+          element={
+            <ProtectedRoute>
+              <NotifyChannels />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notify-templates"
+          element={
+            <ProtectedRoute>
+              <NotifyTemplates />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notify-rules"
+          element={
+            <ProtectedRoute>
+              <NotifyRules />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/on-duty"
+          element={
+            <ProtectedRoute>
+              <OnDutyPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notify-logs"
+          element={
+            <ProtectedRoute>
+              <NotifyLogs />
             </ProtectedRoute>
           }
         />

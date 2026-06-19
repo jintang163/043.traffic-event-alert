@@ -339,4 +339,65 @@ export const videoApi = {
     request.get<any, Result<any>>('/api/videos/stats'),
 };
 
+export const notifyChannelApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/notify/channels/page', { params }),
+  list: () =>
+    request.get<any, Result<any>>('/api/notify/channels/list'),
+  enabled: () =>
+    request.get<any, Result<any>>('/api/notify/channels/enabled'),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/notify/channels/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/notify/channels', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/notify/channels/${id}`),
+};
+
+export const notifyTemplateApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/notify/templates/page', { params }),
+  list: () =>
+    request.get<any, Result<any>>('/api/notify/templates/list'),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/notify/templates/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/notify/templates', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/notify/templates/${id}`),
+};
+
+export const notifyRuleApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/notify/rules/page', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/notify/rules/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/notify/rules', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/notify/rules/${id}`),
+};
+
+export const onDutyApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/on-duty/page', { params }),
+  current: () =>
+    request.get<any, Result<any>>('/api/on-duty/current'),
+  getByDate: (date: string) =>
+    request.get<any, Result<any>>(`/api/on-duty/date/${date}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/on-duty', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/on-duty/${id}`),
+};
+
+export const notifyLogApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/notify/logs/page', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/notify/logs/${id}`),
+  retry: (id: number) =>
+    request.post<any, Result<any>>(`/api/notify/logs/${id}/retry`),
+};
+
 export default request;

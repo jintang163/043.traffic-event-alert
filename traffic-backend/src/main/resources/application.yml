@@ -96,6 +96,18 @@ notification:
     apiKey: YOUR_API_KEY
     templateId: YOUR_TEMPLATE_ID
     emergencyTemplateId: YOUR_EMERGENCY_TEMPLATE_ID
+  voice:
+    enabled: false
+    accessKeyId: YOUR_ACCESS_KEY_ID
+    accessKeySecret: YOUR_ACCESS_KEY_SECRET
+    ttsTemplateCode: TTS_XXXX
+    calledShowNumber: "400XXXXXXX"
+    regionId: cn-hangzhou
+  retry:
+    maxRetries: 3
+    initialDelaySeconds: 30
+    maxDelaySeconds: 300
+    multiplier: 2.0
 
 logging:
   level:

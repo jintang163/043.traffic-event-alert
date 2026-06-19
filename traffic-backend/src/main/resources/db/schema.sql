@@ -579,3 +579,135 @@ CREATE TABLE IF NOT EXISTS video_clip (
     INDEX idx_event_no (event_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS notify_channel (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    channel_code VARCHAR(64) NOT NULL UNIQUE COMMENT '渠道编码: DINGTALK/SMS/VOICE/WECHAT',
+    channel_name VARCHAR(128) NOT NULL COMMENT '渠道名称',
+    channel_type VARCHAR(32) NOT NULL COMMENT '渠道类型: DINGTALK/SMS/VOICE/WECHAT',
+    enabled INT DEFAULT 1 COMMENT '是否启用 0禁用 1启用',
+    config_json TEXT COMMENT '渠道配置JSON(如webhook/apiKey/templateId等)',
+    description VARCHAR(512),
+    sort_order INT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_channel_type (channel_type),
+    INDEX idx_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知渠道配置';
+
+INSERT INTO notify_channel (channel_code, channel_name, channel_type, enabled, config_json, sort_order, create_time) VALUES
+('DINGTALK', '钉钉机器人', 'DINGTALK', 0, '{"webhook":"https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN","secret":"YOUR_SECRET"}', 1, NOW()),
+('SMS_ALIYUN', '阿里云短信', 'SMS', 0, '{"accessKeyId":"YOUR_KEY","accessKeySecret":"YOUR_SECRET","signName":"交通告警","templateCode":"SMS_XXX","regionId":"cn-hangzhou"}', 2, NOW()),
+('VOICE_TTS', '语音TTS外呼', 'VOICE', 0, '{"accessKeyId":"YOUR_KEY","accessKeySecret":"YOUR_SECRET","ttsTemplateCode":"TTS_XXX","calledShowNumber":"400XXXXXXX","regionId":"cn-hangzhou"}', 3, NOW()),
+('WECHAT', '企业微信', 'WECHAT', 0, '{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"}', 4, NOW());
+
+CREATE TABLE IF NOT EXISTS notify_template (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    template_code VARCHAR(64) NOT NULL UNIQUE COMMENT '模板编码',
+    template_name VARCHAR(128) NOT NULL COMMENT '模板名称',
+    channel_type VARCHAR(32) NOT NULL COMMENT '适用渠道类型: DINGTALK/SMS/VOICE/WECHAT',
+    event_type VARCHAR(32) COMMENT '事件类型: ACCIDENT/REVERSE/DEBRIS/ALL',
+    event_level INT COMMENT '事件等级: 1一般/2严重/3紧急/NULL全部',
+    title_template VARCHAR(256) COMMENT '标题模板',
+    content_template TEXT NOT NULL COMMENT '内容模板，支持变量: ${eventType}/${eventLevel}/${cameraName}/${location}/${eventTime}/${description}/${debrisCategory}/${accidentSeverity}',
+    status INT DEFAULT 1 COMMENT '状态 0禁用 1启用',
+    description VARCHAR(512),
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_template_code (template_code),
+    INDEX idx_channel_type (channel_type),
+    INDEX idx_event_type (event_type),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知模板';
+
+INSERT INTO notify_template (template_code, template_name, channel_type, event_type, event_level, title_template, content_template, status, create_time) VALUES
+('TPL_DINGTALK_DEFAULT', '钉钉默认模板', 'DINGTALK', NULL, NULL, '交通事件告警', '${levelText} 交通事件告警\n事件类型: ${eventTypeText}\n摄像头: ${cameraName}\n位置: ${location}\n时间: ${eventTime}\n置信度: ${confidence}%\n描述: ${description}', 1, NOW()),
+('TPL_SMS_URGENT', '短信紧急模板', 'SMS', NULL, 3, '紧急告警', '【交通告警】紧急!${eventTypeText},${location},${eventTime}', 1, NOW()),
+('TPL_SMS_NORMAL', '短信普通模板', 'SMS', NULL, NULL, '交通告警', '【交通告警】${eventTypeText},${location},${eventTime}', 1, NOW()),
+('TPL_VOICE_URGENT', '语音紧急外呼模板', 'VOICE', NULL, 3, '紧急语音告警', '紧急告警，${location}发生${eventTypeText}，请立即处理', 1, NOW()),
+('TPL_WECHAT_DEFAULT', '企微默认模板', 'WECHAT', NULL, NULL, '交通事件告警', '${levelText} 交通事件告警\n> 事件类型: ${eventTypeText}\n> 摄像头: ${cameraName}\n> 位置: ${location}\n> 时间: ${eventTime}\n> 描述: ${description}', 1, NOW());
+
+CREATE TABLE IF NOT EXISTS notify_rule (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    rule_name VARCHAR(128) NOT NULL COMMENT '规则名称',
+    event_type VARCHAR(32) COMMENT '事件类型: ACCIDENT/REVERSE/DEBRIS/NULL全部',
+    event_level INT COMMENT '事件等级: 1/2/3/NULL全部',
+    channel_id BIGINT NOT NULL COMMENT '通知渠道ID',
+    template_id BIGINT COMMENT '通知模板ID',
+    recipient_type INT DEFAULT 1 COMMENT '接收人类型: 1值班人员 2指定部门 3指定用户 4全部',
+    recipient_ids VARCHAR(512) COMMENT '接收人ID列表，逗号分隔(部门ID/用户ID)',
+    at_all INT DEFAULT 0 COMMENT '是否@所有人(钉钉)',
+    enabled INT DEFAULT 1 COMMENT '是否启用',
+    priority INT DEFAULT 0 COMMENT '优先级，数值越小越优先',
+    sort_order INT DEFAULT 0,
+    description VARCHAR(512),
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_event_type (event_type),
+    INDEX idx_event_level (event_level),
+    INDEX idx_channel_id (channel_id),
+    INDEX idx_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知推送规则';
+
+INSERT INTO notify_rule (rule_name, event_type, event_level, channel_id, template_id, recipient_type, at_all, enabled, priority, sort_order, create_time) VALUES
+('紧急事件-钉钉@所有', NULL, 3, 1, 1, 4, 1, 1, 0, 1, NOW()),
+('紧急事件-短信通知', NULL, 3, 2, 2, 1, 0, 1, 1, 2, NOW()),
+('紧急事件-语音外呼', NULL, 3, 3, 4, 1, 0, 1, 2, 3, NOW()),
+('严重事件-钉钉通知', NULL, 2, 1, 1, 1, 0, 1, 3, 4, NOW()),
+('一般事件-钉钉通知', NULL, 1, 1, 1, 1, 0, 1, 5, 5, NOW());
+
+CREATE TABLE IF NOT EXISTS on_duty (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL COMMENT '值班人员用户ID',
+    user_name VARCHAR(64) COMMENT '值班人员姓名',
+    phone VARCHAR(32) COMMENT '值班手机号',
+    dept_id BIGINT COMMENT '部门ID',
+    dept_name VARCHAR(128) COMMENT '部门名称',
+    duty_date DATE NOT NULL COMMENT '值班日期',
+    duty_type INT DEFAULT 1 COMMENT '值班类型: 1白班 2夜班 3全天',
+    start_time DATETIME COMMENT '值班开始时间',
+    end_time DATETIME COMMENT '值班结束时间',
+    status INT DEFAULT 1 COMMENT '状态: 0无效 1有效',
+    remark VARCHAR(256),
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_user_id (user_id),
+    INDEX idx_duty_date (duty_date),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='值班人员排班';
+
+CREATE TABLE IF NOT EXISTS notify_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    log_no VARCHAR(64) NOT NULL UNIQUE COMMENT '日志编号',
+    alert_event_id BIGINT COMMENT '关联告警事件ID',
+    event_no VARCHAR(64) COMMENT '事件编号',
+    channel_id BIGINT COMMENT '通知渠道ID',
+    channel_type VARCHAR(32) COMMENT '渠道类型',
+    template_id BIGINT COMMENT '模板ID',
+    recipient_type INT COMMENT '接收人类型',
+    recipient_info VARCHAR(512) COMMENT '接收人信息(手机号/用户名等)',
+    title VARCHAR(256) COMMENT '通知标题',
+    content TEXT COMMENT '通知内容',
+    send_status INT DEFAULT 0 COMMENT '发送状态: 0待发送 1发送中 2成功 3失败',
+    retry_count INT DEFAULT 0 COMMENT '已重试次数',
+    max_retry INT DEFAULT 3 COMMENT '最大重试次数',
+    next_retry_time DATETIME COMMENT '下次重试时间',
+    response_body TEXT COMMENT '渠道响应内容',
+    error_message VARCHAR(1024) COMMENT '错误信息',
+    send_time DATETIME COMMENT '实际发送时间',
+    success_time DATETIME COMMENT '成功时间',
+    cost_ms BIGINT COMMENT '耗时毫秒',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_log_no (log_no),
+    INDEX idx_alert_event_id (alert_event_id),
+    INDEX idx_channel_type (channel_type),
+    INDEX idx_send_status (send_status),
+    INDEX idx_next_retry (next_retry_time),
+    INDEX idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知推送日志';
+
