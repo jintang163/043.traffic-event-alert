@@ -807,3 +807,128 @@ export const DUTY_TYPE_OPTIONS = [
   { value: 2, label: '夜班' },
   { value: 3, label: '全天' },
 ];
+
+export interface PlateRecognition {
+  id?: number;
+  recognizeNo?: string;
+  alertEventId?: number;
+  eventNo?: string;
+  cameraId?: number;
+  cameraName?: string;
+  plateNumber?: string;
+  plateColor?: string;
+  vehicleColor?: string;
+  vehicleType?: string;
+  confidence?: number;
+  sceneType?: string;
+  enhanceGain?: number;
+  trackId?: number;
+  bboxX1?: number;
+  bboxY1?: number;
+  bboxX2?: number;
+  bboxY2?: number;
+  plateImageUrl?: string;
+  fullImageUrl?: string;
+  recognizeTime?: string;
+  status?: number;
+  remark?: string;
+  createTime?: string;
+}
+
+export interface PlateRecognitionQuery extends PageQuery {
+  plateNumber?: string;
+  eventNo?: string;
+  alertEventId?: number;
+  cameraId?: number;
+  vehicleType?: string;
+  sceneType?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export const SCENE_TYPE_OPTIONS = [
+  { value: 'normal', label: '正常' },
+  { value: 'night', label: '夜间' },
+  { value: 'backlight', label: '逆光' },
+  { value: 'night_backlight', label: '夜间逆光' },
+];
+
+export const SCENE_TYPE_COLORS: Record<string, string> = {
+  normal: 'default',
+  night: 'geekblue',
+  backlight: 'orange',
+  night_backlight: 'magenta',
+};
+
+export interface PoliceSystemConfig {
+  id?: number;
+  systemCode: string;
+  systemName: string;
+  pushUrl: string;
+  authType: 'NONE' | 'TOKEN' | 'BASIC' | string;
+  authToken?: string;
+  basicUsername?: string;
+  basicPassword?: string;
+  enabled: number;
+  retryMax?: number;
+  retryInitialSeconds?: number;
+  retryMultiplier?: number;
+  retryMaxSeconds?: number;
+  timeoutSeconds?: number;
+  remark?: string;
+  createTime?: string;
+  updateTime?: string;
+}
+
+export const AUTH_TYPE_OPTIONS = [
+  { value: 'NONE', label: '无认证' },
+  { value: 'TOKEN', label: 'Token认证' },
+  { value: 'BASIC', label: 'Basic认证' },
+];
+
+export interface PolicePush {
+  id?: number;
+  pushNo?: string;
+  alertEventId?: number;
+  eventNo?: string;
+  plateRecognitionId?: number;
+  eventType?: string;
+  eventLevel?: number;
+  plateNumber?: string;
+  location?: string;
+  cameraId?: number;
+  cameraName?: string;
+  longitude?: number;
+  latitude?: number;
+  eventTime?: string;
+  pushTarget?: string;
+  pushStatus: number;
+  retryCount?: number;
+  maxRetry?: number;
+  nextRetryTime?: string;
+  pushBody?: string;
+  responseBody?: string;
+  errorMessage?: string;
+  costMs?: number;
+  pushTime?: string;
+  successTime?: string;
+  createTime?: string;
+}
+
+export interface PolicePushQuery extends PageQuery {
+  pushStatus?: number;
+  eventNo?: string;
+  alertEventId?: number;
+  plateNumber?: string;
+  pushTarget?: string;
+  eventType?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export const POLICE_PUSH_STATUS_LABELS: Record<number, { label: string; color: string }> = {
+  0: { label: '待推送', color: 'default' },
+  1: { label: '推送中', color: 'processing' },
+  2: { label: '推送成功', color: 'success' },
+  3: { label: '推送失败', color: 'error' },
+};

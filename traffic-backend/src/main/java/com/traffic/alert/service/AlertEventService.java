@@ -46,6 +46,8 @@ public class AlertEventService {
     private final DebrisClassificationService debrisClassificationService;
     private final AccidentSeverityService accidentSeverityService;
     private final VideoRecordingService videoRecordingService;
+    private final PlateRecognitionService plateRecognitionService;
+    private final PolicePushService policePushService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -215,7 +217,79 @@ public class AlertEventService {
             log.warn("调度事件视频录制失败: eventNo={}, error={}", eventNo, e.getMessage());
         }
 
+        java.util.List<com.traffic.alert.entity.PlateRecognition> savedPlates = saveLicensePlates(event, request, camera);
+
+        if ("REVERSE".equals(event.getEventType()) && savedPlates != null && !savedPlates.isEmpty()) {
+            try {
+                policePushService.pushForReverseEvent(event, savedPlates);
+                log.info("逆行事件已同步交警系统推送: eventNo={}, plates={}, count={}",
+                        eventNo,
+                        savedPlates.stream().map(p -> p.getPlateNumber()).toList(),
+                        savedPlates.size());
+            } catch (Exception e) {
+                log.warn("交警系统推送失败: eventNo={}, error={}", eventNo, e.getMessage());
+            }
+        }
+
         return event;
+    }
+
+    private java.util.List<com.traffic.alert.entity.PlateRecognition> saveLicensePlates(
+            AlertEvent event, AiEventCallbackRequest request, Camera camera) {
+        java.util.List<java.util.Map<String, Object>> plates = request.getLicensePlates();
+        if (plates == null || plates.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        java.util.List<com.traffic.alert.entity.PlateRecognition> results = new java.util.ArrayList<>();
+        for (java.util.Map<String, Object> plateMap : plates) {
+            try {
+                com.traffic.alert.entity.PlateRecognition pr = new com.traffic.alert.entity.PlateRecognition();
+                pr.setAlertEventId(event.getId());
+                pr.setEventNo(event.getEventNo());
+                pr.setCameraId(camera.getId());
+                pr.setCameraName(camera.getCameraName());
+                pr.setRecognizeTime(event.getEventTime());
+
+                Object plateNumber = plateMap.get("plate_number") != null ? plateMap.get("plate_number") : plateMap.get("plateNumber");
+                if (plateNumber != null) pr.setPlateNumber(plateNumber.toString());
+                Object conf = plateMap.get("confidence");
+                if (conf != null) {
+                    pr.setConfidence(new java.math.BigDecimal(conf.toString()));
+                }
+                Object plateColor = plateMap.get("plate_color") != null ? plateMap.get("plate_color") : plateMap.get("plateColor");
+                if (plateColor != null) pr.setPlateColor(plateColor.toString());
+                Object vehicleColor = plateMap.get("vehicle_color") != null ? plateMap.get("vehicle_color") : plateMap.get("vehicleColor");
+                if (vehicleColor != null) pr.setVehicleColor(vehicleColor.toString());
+                Object vehicleType = plateMap.get("vehicle_type") != null ? plateMap.get("vehicle_type") : plateMap.get("vehicleType");
+                if (vehicleType != null) pr.setVehicleType(vehicleType.toString());
+                Object scene = plateMap.get("scene_type") != null ? plateMap.get("scene_type") : plateMap.get("sceneType");
+                if (scene != null) pr.setSceneType(scene.toString());
+                Object gain = plateMap.get("enhance_gain") != null ? plateMap.get("enhance_gain") : plateMap.get("enhanceGain");
+                if (gain != null) pr.setEnhanceGain(new java.math.BigDecimal(gain.toString()));
+                Object bbox = plateMap.get("bbox");
+                if (bbox instanceof java.util.List<?> list && list.size() >= 4) {
+                    try {
+                        pr.setBboxX1(((Number) list.get(0)).intValue());
+                        pr.setBboxY1(((Number) list.get(1)).intValue());
+                        pr.setBboxX2(((Number) list.get(2)).intValue());
+                        pr.setBboxY2(((Number) list.get(3)).intValue());
+                    } catch (Exception ignored) {}
+                }
+                Object trackId = plateMap.get("track_id") != null ? plateMap.get("track_id") : plateMap.get("trackId");
+                if (trackId instanceof Number n) pr.setTrackId(n.intValue());
+
+                if (pr.getPlateNumber() != null && !pr.getPlateNumber().isEmpty()) {
+                    plateRecognitionService.save(pr);
+                    results.add(pr);
+                }
+            } catch (Exception e) {
+                log.warn("保存车牌识别结果失败: eventNo={}, err={}", event.getEventNo(), e.getMessage());
+            }
+        }
+        if (!results.isEmpty()) {
+            log.info("保存车牌识别结果: eventNo={}, count={}", event.getEventNo(), results.size());
+        }
+        return results;
     }
 
     private void linkEventToTracks(AlertEvent event, List<Map<String, Object>> trackData, Camera camera) {

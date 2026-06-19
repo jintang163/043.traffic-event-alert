@@ -85,8 +85,15 @@ public class NotifyTemplateService {
     }
 
     public String renderTemplate(String template, AlertEvent event) {
+        return renderTemplate(template, event, null);
+    }
+
+    public String renderTemplate(String template, AlertEvent event, Map<String, String> extraVars) {
         if (template == null || template.isEmpty()) return "";
         Map<String, String> vars = buildTemplateVars(event);
+        if (extraVars != null) {
+            vars.putAll(extraVars);
+        }
         String result = template;
         for (Map.Entry<String, String> entry : vars.entrySet()) {
             result = result.replace("${" + entry.getKey() + "}", entry.getValue() != null ? entry.getValue() : "");

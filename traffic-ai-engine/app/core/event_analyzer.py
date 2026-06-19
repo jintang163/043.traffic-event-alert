@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from app.config.settings import settings
+from app.core.feature_extractor import plate_recognizer
 from app.core.tracker import get_tracker, Track
 from app.core.fence_manager import fence_manager
 from app.schemas.event import (
@@ -28,7 +29,8 @@ class EventAnalyzer:
         tracked_objects: List[TrackedObject],
         reference_direction: Optional[float] = None,
         frame_width: int = 1920,
-        frame_height: int = 1080
+        frame_height: int = 1080,
+        frame: Optional[np.ndarray] = None,
     ) -> List[TrafficEvent]:
         events: List[TrafficEvent] = []
         tracker = get_tracker(camera_id)
@@ -36,7 +38,7 @@ class EventAnalyzer:
         accident_events = self._detect_accident(camera_id, tracker, tracked_objects)
         events.extend(accident_events)
 
-        reverse_events = self._detect_reverse(camera_id, tracker, tracked_objects, reference_direction)
+        reverse_events = self._detect_reverse(camera_id, tracker, tracked_objects, reference_direction, frame)
         events.extend(reverse_events)
 
         debris_events = self._detect_debris(camera_id, tracker, tracked_objects, frame_width, frame_height)
@@ -112,7 +114,8 @@ class EventAnalyzer:
         camera_id: str,
         tracker,
         tracked_objects: List[TrackedObject],
-        reference_direction: Optional[float]
+        reference_direction: Optional[float],
+        frame: Optional[np.ndarray] = None,
     ) -> List[TrafficEvent]:
         events: List[TrafficEvent] = []
         if reference_direction is None:
@@ -141,16 +144,28 @@ class EventAnalyzer:
                 if not self._is_in_cooldown(event_key):
                     confidence = min(0.95, 0.7 + (direction_diff - np.pi * 0.6) / (np.pi * 0.4) * 0.25)
                     if confidence >= settings.EVENT_CONFIDENCE_THRESHOLD:
+                        involved = [track.to_tracked_object()]
+                        plates = plate_recognizer.recognize_for_reverse_event(involved, frame)
                         event = self._create_event(
                             camera_id=camera_id,
                             event_type=EventType.REVERSE,
                             severity=EventSeverity.MEDIUM,
-                            involved_objects=[obj],
+                            involved_objects=involved,
                             confidence=confidence,
-                            description=f"检测到车辆逆行，车辆ID: {track.track_id}，速度: {speed:.1f}px/frame"
+                            description=(
+                                f"检测到车辆逆行，车辆ID: {track.track_id}，速度: {speed:.1f}px/frame"
+                                + (f"，识别车牌: {plates[0][1].plate_number}" if plates else "")
+                            )
                         )
+                        if plates:
+                            event.license_plates = [p[1] for p in plates]
+                            logger.warning(
+                                "Reverse driving detected with plate: camera=%s, track=%s, plate=%s, conf=%.3f",
+                                camera_id, track.track_id, plates[0][1].plate_number, plates[0][1].confidence,
+                            )
+                        else:
+                            logger.warning(f"Reverse driving detected: camera={camera_id}, track={track.track_id}")
                         events.append(event)
-                        logger.warning(f"Reverse driving detected: camera={camera_id}, track={track.track_id}")
 
         return events
 

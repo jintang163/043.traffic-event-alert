@@ -19,6 +19,9 @@ import NotifyTemplates from '@/pages/NotifyTemplates';
 import NotifyRules from '@/pages/NotifyRules';
 import OnDutyPage from '@/pages/OnDuty';
 import NotifyLogs from '@/pages/NotifyLogs';
+import PlateRecognitions from '@/pages/PlateRecognitions';
+import PolicePushes from '@/pages/PolicePushes';
+import PoliceSystemConfigs from '@/pages/PoliceSystemConfigs';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -187,6 +190,30 @@ export default function App() {
           element={
             <ProtectedRoute>
               <NotifyLogs />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/plate-recognitions"
+          element={
+            <ProtectedRoute>
+              <PlateRecognitions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/police-pushes"
+          element={
+            <ProtectedRoute>
+              <PolicePushes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/police-system-configs"
+          element={
+            <ProtectedRoute>
+              <PoliceSystemConfigs />
             </ProtectedRoute>
           }
         />

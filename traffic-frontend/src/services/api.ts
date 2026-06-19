@@ -400,4 +400,57 @@ export const notifyLogApi = {
     request.post<any, Result<any>>(`/api/notify/logs/${id}/retry`),
 };
 
+export const plateRecognitionApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/plate-recognitions', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/plate-recognitions/${id}`),
+  listByEvent: (alertEventId: number) =>
+    request.get<any, Result<any>>(`/api/plate-recognitions/event/${alertEventId}`),
+  listByEventNo: (eventNo: string) =>
+    request.get<any, Result<any>>(`/api/plate-recognitions/event-no/${eventNo}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/plate-recognitions', data),
+  update: (id: number, data: any) =>
+    request.put<any, Result<any>>(`/api/plate-recognitions/${id}`, data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/plate-recognitions/${id}`),
+};
+
+export const policeSystemConfigApi = {
+  list: () =>
+    request.get<any, Result<any>>('/api/police-system-configs'),
+  enabled: () =>
+    request.get<any, Result<any>>('/api/police-system-configs/enabled'),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/police-system-configs/${id}`),
+  getByCode: (systemCode: string) =>
+    request.get<any, Result<any>>(`/api/police-system-configs/code/${systemCode}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/police-system-configs', data),
+  update: (id: number, data: any) =>
+    request.put<any, Result<any>>(`/api/police-system-configs/${id}`, data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/police-system-configs/${id}`),
+};
+
+export const policePushApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/police-pushes', { params }),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/police-pushes/${id}`),
+  listByEvent: (alertEventId: number) =>
+    request.get<any, Result<any>>(`/api/police-pushes/event/${alertEventId}`),
+  retry: (id: number) =>
+    request.post<any, Result<any>>(`/api/police-pushes/${id}/retry`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/police-pushes', data),
+  update: (id: number, data: any) =>
+    request.put<any, Result<any>>(`/api/police-pushes/${id}`, data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/police-pushes/${id}`),
+  statistics: () =>
+    request.get<any, Result<any>>('/api/police-pushes/statistics/summary'),
+};
+
 export default request;

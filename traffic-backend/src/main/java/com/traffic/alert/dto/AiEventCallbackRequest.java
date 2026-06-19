@@ -23,6 +23,8 @@ public class AiEventCallbackRequest {
     private List<Map<String, Object>> trackData;
     private Map<String, Object> bbox;
 
+    private List<Map<String, Object>> licensePlates;
+
     private Integer accidentVehicles;
     private Integer accidentDeformationLevel;
     private Integer accidentRollover;

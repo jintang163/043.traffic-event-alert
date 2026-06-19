@@ -52,6 +52,7 @@ public class NotificationService {
     private final OnDutyService onDutyService;
     private final UserService userService;
     private final DepartmentService departmentService;
+    private final PlateRecognitionService plateRecognitionService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public void sendAlertNotification(AlertEvent alert) {
@@ -102,6 +103,17 @@ public class NotificationService {
 
     private void dispatchPerChannel(AlertEvent alert, NotifyRule rule, NotifyChannel channel,
                                     NotifyTemplate template, String title, String content, List<Recipient> recipients) {
+        Map<String, String> plateVars = buildPlateVars(alert);
+        if (template != null && !plateVars.isEmpty()) {
+            if (template.getTitleTemplate() != null) {
+                String t = notifyTemplateService.renderTemplate(template.getTitleTemplate(), alert, plateVars);
+                if (t != null) title = t;
+            }
+            if (template.getContentTemplate() != null) {
+                String c = notifyTemplateService.renderTemplate(template.getContentTemplate(), alert, plateVars);
+                if (c != null) content = c;
+            }
+        }
         String channelType = channel.getChannelType();
         if ("SMS".equals(channelType) || "VOICE".equals(channelType)) {
             for (Recipient r : recipients) {
@@ -735,5 +747,32 @@ public class NotificationService {
     private static String truncate(String str, int maxLen) {
         if (str == null) return null;
         return str.length() > maxLen ? str.substring(0, maxLen) : str;
+    }
+
+    private Map<String, String> buildPlateVars(AlertEvent alert) {
+        Map<String, String> vars = new HashMap<>();
+        if (alert == null || alert.getId() == null) return vars;
+        try {
+            List<com.traffic.alert.entity.PlateRecognition> plates = plateRecognitionService.listByAlertEventId(alert.getId());
+            if (plates.isEmpty()) return vars;
+            com.traffic.alert.entity.PlateRecognition best = plates.get(0);
+            String joined = plates.stream()
+                    .map(p -> (p.getPlateNumber() != null ? p.getPlateNumber() : ""))
+                    .filter(s -> !s.isEmpty())
+                    .distinct()
+                    .collect(Collectors.joining("、"));
+            vars.put("plateNumber", best.getPlateNumber() != null ? best.getPlateNumber() : "");
+            vars.put("plateNumbers", joined);
+            vars.put("plateColor", best.getPlateColor() != null ? best.getPlateColor() : "");
+            vars.put("vehicleType", best.getVehicleType() != null ? best.getVehicleType() : "");
+            vars.put("vehicleColor", best.getVehicleColor() != null ? best.getVehicleColor() : "");
+            vars.put("plateConfidence", best.getConfidence() != null
+                    ? String.valueOf(best.getConfidence().multiply(new java.math.BigDecimal(100))) : "");
+            vars.put("sceneType", best.getSceneType() != null ? best.getSceneType() : "");
+            vars.put("plateCount", String.valueOf(plates.size()));
+        } catch (Exception e) {
+            log.debug("buildPlateVars failed: {}", e.getMessage());
+        }
+        return vars;
     }
 }

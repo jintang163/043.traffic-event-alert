@@ -19,6 +19,9 @@ import {
   NotificationOutlined,
   MessageOutlined,
   ScheduleOutlined,
+  CarOutlined,
+  SendOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -153,6 +156,28 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           key: '/notify-logs',
           icon: <FileSearchOutlined />,
           label: '推送日志',
+        },
+      ],
+    },
+    {
+      key: 'sub_plate',
+      icon: <CarOutlined />,
+      label: '车牌识别',
+      children: [
+        {
+          key: '/plate-recognitions',
+          icon: <CarOutlined />,
+          label: '识别记录',
+        },
+        {
+          key: '/police-pushes',
+          icon: <SendOutlined />,
+          label: '交警推送日志',
+        },
+        {
+          key: '/police-system-configs',
+          icon: <SafetyOutlined />,
+          label: '交警系统配置',
         },
       ],
     },

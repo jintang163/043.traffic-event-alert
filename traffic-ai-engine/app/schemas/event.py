@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from app.schemas.reid import LicensePlateResult
 from app.schemas.tracking import TrackedObject
 
 
@@ -44,6 +45,7 @@ class TrafficEvent(BaseModel):
     confidence: float = Field(description="事件置信度", ge=0.0, le=1.0)
     metadata: Optional[Dict[str, Any]] = Field(None, description="额外元数据")
     snapshot_base64: Optional[str] = Field(None, description="事件快照 Base64")
+    license_plates: Optional[List[LicensePlateResult]] = Field(None, description="车牌识别结果")
 
 
 class EventDetectionRequest(BaseModel):
@@ -95,3 +97,4 @@ class AiEventCallbackRequest(BaseModel):
     eventVideo: Optional[str] = None
     trackData: Optional[List[Dict[str, Any]]] = None
     bbox: Optional[Dict[str, Any]] = None
+    licensePlates: Optional[List[Dict[str, Any]]] = None

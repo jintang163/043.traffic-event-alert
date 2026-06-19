@@ -37,7 +37,7 @@ import {
   CarOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { alertApi, workOrderApi, departmentApi, globalTrackApi } from '@/services/api';
+import { alertApi, workOrderApi, departmentApi, globalTrackApi, plateRecognitionApi, policePushApi } from '@/services/api';
 import { wsService } from '@/services/websocket';
 import { useAlertStore } from '@/store/alertStore';
 import {
@@ -54,6 +54,10 @@ import {
   type WorkOrder,
   type GlobalTrack,
   type DebrisCategoryOption,
+  type PlateRecognition,
+  type PolicePush,
+  SCENE_TYPE_COLORS,
+  POLICE_PUSH_STATUS_LABELS,
 } from '@/types';
 
 const { RangePicker } = DatePicker;
@@ -73,6 +77,8 @@ const Alerts: React.FC = () => {
   const [currentAlert, setCurrentAlert] = useState<AlertEvent | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [linkedTracks, setLinkedTracks] = useState<GlobalTrack[]>([]);
+  const [plateRecognitions, setPlateRecognitions] = useState<PlateRecognition[]>([]);
+  const [policePushes, setPolicePushes] = useState<PolicePush[]>([]);
   const [falseModal, setFalseModal] = useState(false);
   const [handleModal, setHandleModal] = useState(false);
   const [orderModal, setOrderModal] = useState(false);
@@ -173,7 +179,36 @@ const Alerts: React.FC = () => {
     } catch (e) {
       setLinkedTracks([]);
     }
+    try {
+      const res: any = await plateRecognitionApi.listByEvent(record.id);
+      if (res.code === 200) setPlateRecognitions(res.data || []);
+      else setPlateRecognitions([]);
+    } catch (e) {
+      setPlateRecognitions([]);
+    }
+    try {
+      const res: any = await policePushApi.listByEvent(record.id);
+      if (res.code === 200) setPolicePushes(res.data || []);
+      else setPolicePushes([]);
+    } catch (e) {
+      setPolicePushes([]);
+    }
     setDetailDrawer(true);
+  };
+
+  const handleRetryPolicePush = async (id: number) => {
+    try {
+      const res: any = await policePushApi.retry(id);
+      if (res.code === 200) {
+        message.success('已触发重试');
+        if (currentAlert) {
+          const pr: any = await policePushApi.listByEvent(currentAlert.id);
+          if (pr.code === 200) setPolicePushes(pr.data || []);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   };
 
   const handleMarkHandled = async (record: AlertEvent) => {
@@ -741,6 +776,128 @@ const Alerts: React.FC = () => {
                 />
               </div>
             )}
+
+            <div style={{ marginTop: 24 }}>
+              <h4 style={{ marginBottom: 8 }}>🚙 车牌识别结果 ({plateRecognitions.length})</h4>
+              {plateRecognitions.length === 0 ? (
+                <div style={{ color: '#999', fontSize: 13, padding: '12px 0' }}>暂无识别记录</div>
+              ) : (
+                <Table
+                  size="small"
+                  dataSource={plateRecognitions}
+                  rowKey="id"
+                  pagination={false}
+                  scroll={{ x: 1000 }}
+                  columns={[
+                    { title: '车牌号', dataIndex: 'plateNumber', render: (v) => v || '-', width: 120 },
+                    {
+                      title: '车牌颜色',
+                      dataIndex: 'plateColor',
+                      width: 90,
+                      render: (v) => v || '-',
+                    },
+                    {
+                      title: '车辆类型',
+                      dataIndex: 'vehicleType',
+                      width: 100,
+                      render: (v) => v || '-',
+                    },
+                    {
+                      title: '车身颜色',
+                      dataIndex: 'vehicleColor',
+                      width: 90,
+                      render: (v) => v || '-',
+                    },
+                    {
+                      title: '置信度',
+                      dataIndex: 'confidence',
+                      width: 90,
+                      render: (v) => (v != null ? `${(v * 100).toFixed(1)}%` : '-'),
+                    },
+                    {
+                      title: '场景',
+                      dataIndex: 'sceneType',
+                      width: 100,
+                      render: (v) =>
+                        v ? <Tag color={SCENE_TYPE_COLORS[v] || 'default'}>{v}</Tag> : '-',
+                    },
+                    {
+                      title: '识别时间',
+                      dataIndex: 'recognizeTime',
+                      width: 170,
+                      render: (v) => v || '-',
+                    },
+                    {
+                      title: '车牌图',
+                      dataIndex: 'plateImageUrl',
+                      width: 110,
+                      render: (v) =>
+                        v ? <Image src={v} width={90} height={34} style={{ objectFit: 'cover', borderRadius: 4 }} /> : '-',
+                    },
+                  ]}
+                />
+              )}
+            </div>
+
+            <div style={{ marginTop: 24 }}>
+              <h4 style={{ marginBottom: 8 }}>🚓 交警系统推送 ({policePushes.length})</h4>
+              {policePushes.length === 0 ? (
+                <div style={{ color: '#999', fontSize: 13, padding: '12px 0' }}>暂无推送记录</div>
+              ) : (
+                <Table
+                  size="small"
+                  dataSource={policePushes}
+                  rowKey="id"
+                  pagination={false}
+                  scroll={{ x: 1100 }}
+                  columns={[
+                    { title: '推送编号', dataIndex: 'pushNo', width: 160, render: (v) => v || '-' },
+                    { title: '车牌', dataIndex: 'plateNumber', width: 100, render: (v) => v || '-' },
+                    { title: '推送目标', dataIndex: 'pushTarget', width: 150, render: (v) => v || '-' },
+                    {
+                      title: '状态',
+                      dataIndex: 'pushStatus',
+                      width: 100,
+                      render: (val) => {
+                        const s = POLICE_PUSH_STATUS_LABELS[val] || { label: `${val}`, color: 'default' };
+                        return <Tag color={s.color}>{s.label}</Tag>;
+                      },
+                    },
+                    {
+                      title: '重试',
+                      width: 80,
+                      align: 'center',
+                      render: (_, r: any) => `${r.retryCount || 0}/${r.maxRetry || '-'}`,
+                    },
+                    { title: '耗时(ms)', dataIndex: 'costMs', width: 90, align: 'center', render: (v) => v ?? '-' },
+                    {
+                      title: '推送时间',
+                      dataIndex: 'pushTime',
+                      width: 170,
+                      render: (v) => v || '-',
+                    },
+                    {
+                      title: '错误',
+                      dataIndex: 'errorMessage',
+                      width: 140,
+                      ellipsis: true,
+                      render: (v) => (v ? <Tooltip title={v}>{v}</Tooltip> : '-'),
+                    },
+                    {
+                      title: '操作',
+                      width: 80,
+                      fixed: 'right',
+                      render: (_, r: any) =>
+                        r.pushStatus === 3 ? (
+                          <Button type="link" size="small" onClick={() => handleRetryPolicePush(r.id)}>
+                            重试
+                          </Button>
+                        ) : null,
+                    },
+                  ]}
+                />
+              )}
+            </div>
 
             <div style={{ marginTop: 24 }}>
               <h4 style={{ marginBottom: 8 }}>

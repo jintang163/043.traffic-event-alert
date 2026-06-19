@@ -228,7 +228,8 @@ class StreamProcessor:
                     camera_id=str(camera_id),
                     tracked_objects=tracked_objects,
                     frame_width=frame.shape[1],
-                    frame_height=frame.shape[0]
+                    frame_height=frame.shape[0],
+                    frame=frame,
                 )
 
                 for event in events:
@@ -674,7 +675,8 @@ class StreamProcessor:
                 snapshotBase64=snapshot_base64,
                 eventVideo=event_video_url,
                 trackData=[obj.model_dump() for obj in event.involved_objects] if event.involved_objects else None,
-                bbox=event.involved_objects[0].bbox.model_dump() if event.involved_objects else None
+                bbox=event.involved_objects[0].bbox.model_dump() if event.involved_objects else None,
+                licensePlates=[lp.model_dump(mode="json") for lp in event.license_plates] if event.license_plates else None,
             )
 
             async with httpx.AsyncClient(timeout=10.0) as client:

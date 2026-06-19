@@ -724,3 +724,108 @@ CREATE TABLE IF NOT EXISTS notify_log (
     INDEX idx_create_time (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知推送日志';
 
+CREATE TABLE IF NOT EXISTS plate_recognition (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    recognize_no VARCHAR(64) NOT NULL UNIQUE COMMENT '识别编号',
+    alert_event_id BIGINT COMMENT '关联告警事件ID',
+    event_no VARCHAR(64) COMMENT '事件编号',
+    camera_id BIGINT COMMENT '摄像头ID',
+    camera_name VARCHAR(128) COMMENT '摄像头名称',
+    plate_number VARCHAR(32) COMMENT '车牌号',
+    plate_color VARCHAR(16) COMMENT '车牌颜色',
+    vehicle_color VARCHAR(32) COMMENT '车身颜色',
+    vehicle_type VARCHAR(32) COMMENT '车辆类型',
+    confidence DECIMAL(6,4) COMMENT '识别置信度',
+    scene_type VARCHAR(16) COMMENT '场景类型 normal/night/backlight',
+    enhance_gain DECIMAL(6,2) COMMENT '图像增强增益',
+    track_id INT COMMENT '本地追踪ID',
+    bbox_x1 INT,
+    bbox_y1 INT,
+    bbox_x2 INT,
+    bbox_y2 INT,
+    plate_image_url VARCHAR(512) COMMENT '车牌截取图',
+    full_image_url VARCHAR(512) COMMENT '全景图',
+    recognize_time DATETIME COMMENT '识别时间',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_recognize_no (recognize_no),
+    INDEX idx_alert_event_id (alert_event_id),
+    INDEX idx_event_no (event_no),
+    INDEX idx_plate_number (plate_number),
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_recognize_time (recognize_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='车牌识别记录';
+
+CREATE TABLE IF NOT EXISTS police_push (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    push_no VARCHAR(64) NOT NULL UNIQUE COMMENT '推送编号',
+    alert_event_id BIGINT COMMENT '关联告警事件ID',
+    event_no VARCHAR(64) COMMENT '事件编号',
+    plate_recognition_id BIGINT COMMENT '车牌识别ID',
+    event_type VARCHAR(32) COMMENT '事件类型',
+    event_level INT COMMENT '事件等级',
+    plate_number VARCHAR(32) COMMENT '车牌号',
+    plate_color VARCHAR(16) COMMENT '车牌颜色',
+    vehicle_type VARCHAR(32) COMMENT '车辆类型',
+    location VARCHAR(512) COMMENT '事件位置',
+    camera_id BIGINT COMMENT '摄像头ID',
+    camera_name VARCHAR(128) COMMENT '摄像头名称',
+    longitude DECIMAL(12,8),
+    latitude DECIMAL(12,8),
+    event_time DATETIME COMMENT '事件时间',
+    push_status INT DEFAULT 0 COMMENT '推送状态 0待推 1推送中 2成功 3失败',
+    retry_count INT DEFAULT 0,
+    max_retry INT DEFAULT 5,
+    next_retry_time DATETIME,
+    push_target VARCHAR(64) COMMENT '推送目标标识(webhook url或系统代号)',
+    push_body TEXT COMMENT '推送请求体(JSON)',
+    response_body TEXT COMMENT '响应内容',
+    error_message VARCHAR(1024),
+    cost_ms BIGINT,
+    push_time DATETIME,
+    success_time DATETIME,
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_push_no (push_no),
+    INDEX idx_alert_event_id (alert_event_id),
+    INDEX idx_event_no (event_no),
+    INDEX idx_plate_number (plate_number),
+    INDEX idx_push_status (push_status),
+    INDEX idx_next_retry (next_retry_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交警系统推送记录';
+
+CREATE TABLE IF NOT EXISTS police_system_config (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    system_code VARCHAR(64) NOT NULL UNIQUE COMMENT '系统代号',
+    system_name VARCHAR(128) COMMENT '系统名称',
+    push_url VARCHAR(512) COMMENT '推送接口地址',
+    auth_type VARCHAR(32) DEFAULT 'NONE' COMMENT '认证方式 NONE/TOKEN/BASIC',
+    auth_token VARCHAR(512) COMMENT '认证Token或用户名:密码',
+    enabled INT DEFAULT 1 COMMENT '是否启用',
+    retry_max INT DEFAULT 5 COMMENT '最大重试次数',
+    retry_initial_seconds INT DEFAULT 10 COMMENT '初始重试间隔(秒)',
+    retry_multiplier DECIMAL(4,2) DEFAULT 2.00,
+    retry_max_seconds INT DEFAULT 300,
+    remark VARCHAR(512),
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+    INDEX idx_system_code (system_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交警系统对接配置';
+
+INSERT INTO police_system_config (system_code, system_name, push_url, auth_type, enabled, retry_max, retry_initial_seconds, retry_multiplier, retry_max_seconds, remark, create_time) VALUES
+('TRAFFIC_POLICE_API', '省交警总队违法受理系统', 'https://police.example.com/api/v1/traffic-event/report', 'TOKEN', 0, 5, 10, 2.00, 300, '默认配置，需填入真实push_url和auth_token后启用', NOW()),
+('LOCAL_POLICE_BUREAU', '属地交警大队平台', 'https://local-police.example.com/api/event/upload', 'NONE', 0, 3, 30, 1.50, 600, '备用推送目标', NOW());
+
+INSERT INTO notify_template (template_code, template_name, channel_type, event_type, event_level, title_template, content_template, status, create_time) VALUES
+('TPL_DINGTALK_REVERSE', '逆行-钉钉模板', 'DINGTALK', 'REVERSE', NULL, '逆行车辆告警', '【${levelText}】逆行车辆已识别车牌\n车牌号: ${plateNumber}(${plateColor})\n车辆类型: ${vehicleType}\n位置: ${location}\n摄像头: ${cameraName}\n时间: ${eventTime}\n置信度: ${confidence}%', 1, NOW()),
+('TPL_SMS_REVERSE', '逆行-短信模板', 'SMS', 'REVERSE', NULL, '逆行告警', '【交通告警】逆行:${plateNumber},${location},${eventTime}', 1, NOW()),
+('TPL_VOICE_REVERSE', '逆行-语音外呼模板', 'VOICE', 'REVERSE', 3, '逆行语音告警', '紧急告警:${location}发生逆行,车牌号${plateNumber},请立即处置', 1, NOW());
+
+INSERT INTO notify_rule (rule_name, event_type, event_level, channel_id, template_id, recipient_type, recipient_ids, at_all, enabled, priority, sort_order, create_time) VALUES
+('逆行-钉钉@值班', 'REVERSE', NULL, 1, (SELECT id FROM notify_template WHERE template_code='TPL_DINGTALK_REVERSE'), 1, NULL, 0, 1, 2, 9, NOW()),
+('逆行-短信值班', 'REVERSE', NULL, 2, (SELECT id FROM notify_template WHERE template_code='TPL_SMS_REVERSE'), 1, NULL, 0, 1, 2, 10, NOW()),
+('逆行-紧急语音外呼', 'REVERSE', 3, 3, (SELECT id FROM notify_template WHERE template_code='TPL_VOICE_REVERSE'), 1, NULL, 0, 1, 1, 11, NOW());
+
