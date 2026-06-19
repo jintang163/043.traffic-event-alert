@@ -16,12 +16,12 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { patrolRouteApi, cameraApi } from '@/services/api';
-import { wsService, type DetectionItem } from '@/services/websocket';
+import { wsService, type DetectionItem, type WsAlertEvent } from '@/services/websocket';
 import VideoPlayer from '@/components/VideoPlayer';
 import {
   PATROL_STATUS_LABELS, PATROL_EXECUTION_STATUS_LABELS,
   PATROL_EXECUTION_STATUS_COLORS,
-  type PatrolRoute, type PatrolRoutePoint, type PatrolExecutionLog, type Camera, type AlertEvent,
+  type PatrolRoute, type PatrolRoutePoint, type PatrolExecutionLog, type Camera,
 } from '@/types';
 
 const { Option } = Select;
@@ -32,10 +32,22 @@ interface PatrolState {
   currentIndex: number;
   currentPoint: PatrolRoutePoint | null;
   executionLogId: number | null;
-  detectedEvents: AlertEvent[];
+  detectedEvents: DetectedPatrolEvent[];
   countdown: number;
   loopMode: number;
   staySeconds: number;
+}
+
+interface DetectedPatrolEvent {
+  id: number;
+  eventType: string;
+  eventLevel: number;
+  cameraId: number;
+  cameraName: string;
+  eventTime: string;
+  confidence: number;
+  description?: string;
+  location?: string;
 }
 
 const VirtualPatrol: React.FC = () => {
@@ -81,6 +93,10 @@ const VirtualPatrol: React.FC = () => {
   });
 
   const [liveDetections, setLiveDetections] = useState<DetectionItem[]>([]);
+
+  const [streamUrlMap, setStreamUrlMap] = useState<Record<number, string>>({});
+
+  const alertUnsubRef = useRef<(() => void) | null>(null);
 
   interface CameraForRoute extends Camera {
     sortOrder: number;
@@ -374,6 +390,72 @@ const VirtualPatrol: React.FC = () => {
     setSelectedCameras(newSelected);
   };
 
+  const fetchStreamUrl = async (cameraId: number): Promise<string> => {
+    if (streamUrlMap[cameraId]) return streamUrlMap[cameraId];
+    try {
+      const res: any = await cameraApi.getStream(cameraId);
+      if (res.code === 200 && res.data) {
+        const url = res.data.streamUrl || res.data.url || res.data;
+        setStreamUrlMap((prev) => ({ ...prev, [cameraId]: url }));
+        return url;
+      }
+    } catch (e) {
+      console.error('获取摄像头流地址失败', cameraId, e);
+    }
+    return `/api/cameras/${cameraId}/stream`;
+  };
+
+  const prefetchStreamUrls = async (points: PatrolRoutePoint[]) => {
+    const uniqueIds = [...new Set(points.map((p) => p.cameraId))];
+    await Promise.all(uniqueIds.map((id) => fetchStreamUrl(id)));
+  };
+
+  const subscribePatrolAlerts = () => {
+    if (alertUnsubRef.current) {
+      alertUnsubRef.current();
+      alertUnsubRef.current = null;
+    }
+
+    alertUnsubRef.current = wsService.onAlert((alert: WsAlertEvent) => {
+      setPatrolState((prev) => {
+        if (!prev.isRunning || !prev.currentPoint) return prev;
+        if (alert.cameraId !== prev.currentPoint.cameraId) return prev;
+        if (prev.detectedEvents.some((e) => e.id === alert.id)) return prev;
+
+        const newEvent: DetectedPatrolEvent = {
+          id: alert.id,
+          eventType: alert.eventType,
+          eventLevel: alert.eventLevel,
+          cameraId: alert.cameraId,
+          cameraName: alert.cameraName,
+          eventTime: alert.eventTime,
+          confidence: alert.confidence,
+          description: alert.description,
+          location: alert.location,
+        };
+
+        const updated = [...prev.detectedEvents, newEvent];
+
+        if (prev.executionLogId) {
+          patrolRouteApi.updateProgress(
+            prev.executionLogId,
+            prev.currentIndex + 1,
+            JSON.stringify(updated),
+          );
+        }
+
+        return { ...prev, detectedEvents: updated };
+      });
+    });
+  };
+
+  const unsubscribePatrolAlerts = () => {
+    if (alertUnsubRef.current) {
+      alertUnsubRef.current();
+      alertUnsubRef.current = null;
+    }
+  };
+
   const startPatrol = async (record: PatrolRoute) => {
     const res: any = await patrolRouteApi.get(record.id);
     if (res.code !== 200) return;
@@ -385,6 +467,9 @@ const VirtualPatrol: React.FC = () => {
     }
 
     const sortedPoints = [...routeDetail.points].sort((a, b) => a.sortOrder - b.sortOrder);
+
+    await prefetchStreamUrls(sortedPoints);
+
     setSelectedRoute(routeDetail);
     setRoutePoints(sortedPoints);
 
@@ -404,10 +489,11 @@ const VirtualPatrol: React.FC = () => {
     });
 
     setShowExecutionModal(true);
-    startPatrolTimer(sortedPoints, 0, startRes.data);
+    subscribePatrolAlerts();
+    startPatrolTimer(sortedPoints, 0, startRes.data, routeDetail.loopMode);
   };
 
-  const startPatrolTimer = (points: PatrolRoutePoint[], startIndex: number, logId: number) => {
+  const startPatrolTimer = (points: PatrolRoutePoint[], startIndex: number, logId: number, loopMode: number) => {
     if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     if (patrolTimerRef.current) clearInterval(patrolTimerRef.current);
 
@@ -416,7 +502,7 @@ const VirtualPatrol: React.FC = () => {
     const nextPoint = () => {
       currentIdx++;
       if (currentIdx >= points.length) {
-        if (patrolState.loopMode === 1) {
+        if (loopMode === 1) {
           currentIdx = 0;
         } else {
           stopPatrol(logId, '巡逻完成');
@@ -425,6 +511,7 @@ const VirtualPatrol: React.FC = () => {
       }
 
       const point = points[currentIdx];
+      fetchStreamUrl(point.cameraId);
       setPatrolState((prev) => ({
         ...prev,
         currentIndex: currentIdx,
@@ -454,21 +541,24 @@ const VirtualPatrol: React.FC = () => {
       }, 1000);
     };
 
+    fetchStreamUrl(points[startIndex].cameraId);
     startCountdown(points[startIndex].staySeconds);
   };
 
   const stopPatrol = (logId: number, remark: string) => {
     if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     if (patrolTimerRef.current) clearInterval(patrolTimerRef.current);
+    unsubscribePatrolAlerts();
 
-    patrolRouteApi.complete(logId, JSON.stringify(patrolState.detectedEvents), remark);
-
-    setPatrolState((prev) => ({
-      ...prev,
-      isRunning: false,
-      isPaused: false,
-      countdown: 0,
-    }));
+    setPatrolState((prev) => {
+      patrolRouteApi.complete(logId, JSON.stringify(prev.detectedEvents), remark);
+      return {
+        ...prev,
+        isRunning: false,
+        isPaused: false,
+        countdown: 0,
+      };
+    });
 
     message.success(remark);
   };
@@ -487,11 +577,46 @@ const VirtualPatrol: React.FC = () => {
     if (newIndex < 0) newIndex = routePoints.length - 1;
     if (newIndex >= routePoints.length) newIndex = 0;
 
+    const point = routePoints[newIndex];
+
+    fetchStreamUrl(point.cameraId);
+
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    const seconds = point.staySeconds;
+    let remaining = seconds;
+
+    countdownTimerRef.current = setInterval(() => {
+      setPatrolState((prev) => {
+        if (prev.isPaused) return prev;
+        remaining--;
+        if (remaining <= 0) {
+          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+          const nextIdx = newIndex + 1;
+          if (nextIdx >= routePoints.length) {
+            if (prev.loopMode === 1) {
+              const nextPoint = routePoints[0];
+              fetchStreamUrl(nextPoint.cameraId);
+              stepToIndex(0);
+            } else {
+              stopPatrol(prev.executionLogId!, '巡逻完成');
+            }
+          } else {
+            const nextPoint = routePoints[nextIdx];
+            fetchStreamUrl(nextPoint.cameraId);
+            stepToIndex(nextIdx);
+          }
+          return { ...prev, countdown: 0 };
+        }
+        return { ...prev, countdown: remaining };
+      });
+    }, 1000);
+
     setPatrolState((prev) => ({
       ...prev,
       currentIndex: newIndex,
-      currentPoint: routePoints[newIndex],
-      countdown: routePoints[newIndex].staySeconds,
+      currentPoint: point,
+      countdown: seconds,
     }));
 
     if (patrolState.executionLogId) {
@@ -499,10 +624,56 @@ const VirtualPatrol: React.FC = () => {
     }
   };
 
+  const stepToIndex = (index: number) => {
+    if (index < 0 || index >= routePoints.length) return;
+    const point = routePoints[index];
+
+    fetchStreamUrl(point.cameraId);
+
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    const seconds = point.staySeconds;
+    let remaining = seconds;
+
+    countdownTimerRef.current = setInterval(() => {
+      setPatrolState((prev) => {
+        if (prev.isPaused) return prev;
+        remaining--;
+        if (remaining <= 0) {
+          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+          const nextIdx = index + 1;
+          if (nextIdx >= routePoints.length) {
+            if (prev.loopMode === 1) {
+              stepToIndex(0);
+            } else {
+              stopPatrol(prev.executionLogId!, '巡逻完成');
+            }
+          } else {
+            stepToIndex(nextIdx);
+          }
+          return { ...prev, countdown: 0 };
+        }
+        return { ...prev, countdown: remaining };
+      });
+    }, 1000);
+
+    setPatrolState((prev) => ({
+      ...prev,
+      currentIndex: index,
+      currentPoint: point,
+      countdown: seconds,
+    }));
+
+    if (patrolState.executionLogId) {
+      patrolRouteApi.updateProgress(patrolState.executionLogId, index + 1);
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
       if (patrolTimerRef.current) clearInterval(patrolTimerRef.current);
+      unsubscribePatrolAlerts();
     };
   }, []);
 
@@ -862,7 +1033,7 @@ const VirtualPatrol: React.FC = () => {
                 }
               >
                 <VideoPlayer
-                  url={`/api/cameras/${patrolState.currentPoint.cameraId}/stream`}
+                  url={streamUrlMap[patrolState.currentPoint.cameraId] || `/api/cameras/${patrolState.currentPoint.cameraId}/stream`}
                   cameraId={patrolState.currentPoint.cameraId}
                   height={420}
                   enableDetectionOverlay
@@ -965,11 +1136,14 @@ const VirtualPatrol: React.FC = () => {
                         <Space direction="vertical" size={0} style={{ width: '100%' }}>
                           <Space>
                             <Tag color="red">{event.eventType}</Tag>
+                            <Tag color={event.eventLevel >= 3 ? 'red' : event.eventLevel >= 2 ? 'orange' : 'blue'}>
+                              等级{event.eventLevel}
+                            </Tag>
                             <span style={{ fontSize: 12, color: '#888' }}>
                               {event.eventTime}
                             </span>
                           </Space>
-                          <span style={{ fontSize: 12 }}>{event.description || event.location}</span>
+                          <span style={{ fontSize: 12 }}>{event.description || event.location || event.cameraName}</span>
                         </Space>
                       </List.Item>
                     )}

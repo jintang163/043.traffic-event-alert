@@ -131,6 +131,15 @@ public class PatrolRouteService {
             throw new BusinessException("巡逻路线没有点位");
         }
 
+        int effectiveLoopMode = loopMode != null ? loopMode : route.getLoopMode();
+        int effectiveStaySeconds = staySeconds != null ? staySeconds : route.getStaySeconds();
+
+        if (staySeconds != null) {
+            for (PatrolRoutePoint point : points) {
+                point.setStaySeconds(effectiveStaySeconds);
+            }
+        }
+
         PatrolExecutionLog log = new PatrolExecutionLog();
         log.setRouteId(routeId);
         log.setRouteName(route.getRouteName());
@@ -140,9 +149,10 @@ public class PatrolRouteService {
         log.setExecutionStatus(1);
         log.setTotalPoints(points.size());
         log.setCompletedPoints(0);
+        log.setRemark("loopMode=" + effectiveLoopMode + ", staySeconds=" + effectiveStaySeconds);
         patrolExecutionLogMapper.insert(log);
 
-        log.info("开始巡逻执行: routeId={}, logId={}, user={}", routeId, log.getId(), userName);
+        log.info("开始巡逻执行: routeId={}, logId={}, user={}, loopMode={}, staySeconds={}", routeId, log.getId(), userName, effectiveLoopMode, effectiveStaySeconds);
         return log.getId();
     }
 
