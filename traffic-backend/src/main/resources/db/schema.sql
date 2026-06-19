@@ -1075,3 +1075,56 @@ ALTER TABLE edge_offline_event ADD COLUMN IF NOT EXISTS snapshot_url VARCHAR(512
 ALTER TABLE edge_offline_event ADD COLUMN IF NOT EXISTS video_url VARCHAR(512) DEFAULT NULL COMMENT '视频URL(MinIO)' AFTER snapshot_url;
 ALTER TABLE edge_offline_event ADD INDEX IF NOT EXISTS idx_alert_event_id (alert_event_id);
 
+CREATE TABLE IF NOT EXISTS patrol_route (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    route_name VARCHAR(128) NOT NULL COMMENT '路线名称',
+    route_code VARCHAR(64) NOT NULL COMMENT '路线编码',
+    description VARCHAR(512) DEFAULT NULL COMMENT '路线描述',
+    status TINYINT DEFAULT 1 COMMENT '状态 0-停用 1-启用',
+    stay_seconds INT DEFAULT 30 COMMENT '每个摄像头停留秒数',
+    loop_mode TINYINT DEFAULT 0 COMMENT '循环模式 0-不循环 1-循环',
+    create_user_id BIGINT DEFAULT NULL COMMENT '创建用户ID',
+    create_user_name VARCHAR(64) DEFAULT NULL COMMENT '创建用户名称',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_route_code (route_code),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='巡逻路线表';
+
+CREATE TABLE IF NOT EXISTS patrol_route_point (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    route_id BIGINT NOT NULL COMMENT '路线ID',
+    camera_id BIGINT NOT NULL COMMENT '摄像头ID',
+    camera_name VARCHAR(128) DEFAULT NULL COMMENT '摄像头名称',
+    camera_code VARCHAR(64) DEFAULT NULL COMMENT '摄像头编码',
+    sort_order INT DEFAULT 0 COMMENT '排序号',
+    stay_seconds INT DEFAULT 30 COMMENT '停留秒数',
+    longitude DECIMAL(10,7) DEFAULT NULL COMMENT '经度',
+    latitude DECIMAL(10,7) DEFAULT NULL COMMENT '纬度',
+    location VARCHAR(256) DEFAULT NULL COMMENT '位置描述',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_route_id (route_id),
+    INDEX idx_camera_id (camera_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='巡逻路线点位表';
+
+CREATE TABLE IF NOT EXISTS patrol_execution_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    route_id BIGINT NOT NULL COMMENT '路线ID',
+    route_name VARCHAR(128) DEFAULT NULL COMMENT '路线名称',
+    start_user_id BIGINT DEFAULT NULL COMMENT '启动用户ID',
+    start_user_name VARCHAR(64) DEFAULT NULL COMMENT '启动用户名称',
+    start_time DATETIME DEFAULT NULL COMMENT '开始时间',
+    end_time DATETIME DEFAULT NULL COMMENT '结束时间',
+    execution_status TINYINT DEFAULT 0 COMMENT '执行状态 0-待执行 1-执行中 2-已完成 3-已中断',
+    total_points INT DEFAULT 0 COMMENT '总点位数量',
+    completed_points INT DEFAULT 0 COMMENT '已完成点位数量',
+    detected_events TEXT DEFAULT NULL COMMENT '检测到的事件JSON',
+    remark VARCHAR(512) DEFAULT NULL COMMENT '备注',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_route_id (route_id),
+    INDEX idx_execution_status (execution_status),
+    INDEX idx_start_time (start_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='巡逻执行日志表';
+

@@ -1124,3 +1124,66 @@ export const HARDWARE_MODEL_OPTIONS = [
   { value: 'NVIDIA Jetson Orin Nano', label: 'NVIDIA Jetson Orin Nano' },
   { value: 'Other', label: '其他' },
 ];
+
+export interface PatrolRoute {
+  id: number;
+  routeName: string;
+  routeCode: string;
+  description?: string;
+  status: number;
+  staySeconds: number;
+  loopMode: number;
+  createUserId?: number;
+  createUserName?: string;
+  createTime?: string;
+  updateTime?: string;
+  points?: PatrolRoutePoint[];
+}
+
+export interface PatrolRoutePoint {
+  id: number;
+  routeId: number;
+  cameraId: number;
+  cameraName?: string;
+  cameraCode?: string;
+  sortOrder: number;
+  staySeconds: number;
+  longitude?: number;
+  latitude?: number;
+  location?: string;
+}
+
+export interface PatrolExecutionLog {
+  id: number;
+  routeId: number;
+  routeName: string;
+  startUserId?: number;
+  startUserName?: string;
+  startTime?: string;
+  endTime?: string;
+  executionStatus: number;
+  totalPoints: number;
+  completedPoints: number;
+  detectedEvents?: string;
+  remark?: string;
+  createTime?: string;
+}
+
+export const PATROL_STATUS_LABELS: Record<number, string> = {
+  0: '停用',
+  1: '启用',
+};
+
+export const PATROL_EXECUTION_STATUS_LABELS: Record<number, string> = {
+  0: '待执行',
+  1: '执行中',
+  2: '已完成',
+  3: '已中断',
+};
+
+export const PATROL_EXECUTION_STATUS_COLORS: Record<number, string> = {
+  0: 'default',
+  1: 'processing',
+  2: 'success',
+  3: 'error',
+};

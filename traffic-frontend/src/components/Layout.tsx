@@ -73,6 +73,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       label: '边缘节点',
     },
     {
+      key: '/virtual-patrol',
+      icon: <CarOutlined />,
+      label: '虚拟巡逻车',
+    },
+    {
       key: '/alerts',
       icon: (
         <Badge count={unreadCount} size="small" offset={[8, -2]}>

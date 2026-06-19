@@ -496,4 +496,25 @@ export const edgeNodeApi = {
     request.get<any, Result<any>>(`/api/edge-nodes/${id}/offline-events`, { params: { uploadStatus } }),
 };
 
+export const patrolRouteApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/patrol/routes/page', { params }),
+  list: () =>
+    request.get<any, Result<any>>('/api/patrol/routes/list'),
+  get: (id: number) =>
+    request.get<any, Result<any>>(`/api/patrol/routes/${id}`),
+  save: (data: any) =>
+    request.post<any, Result<any>>('/api/patrol/routes', data),
+  delete: (id: number) =>
+    request.delete<any, Result<any>>(`/api/patrol/routes/${id}`),
+  start: (id: number, data?: any) =>
+    request.post<any, Result<any>>(`/api/patrol/routes/${id}/start`, data || {}),
+  complete: (logId: number, detectedEvents?: string, remark?: string) =>
+    request.post<any, Result<any>>(`/api/patrol/routes/execution/${logId}/complete`, null, { params: { detectedEvents, remark } }),
+  updateProgress: (logId: number, completedPoints: number, detectedEvents?: string) =>
+    request.post<any, Result<any>>(`/api/patrol/routes/execution/${logId}/progress`, null, { params: { completedPoints, detectedEvents } }),
+  listExecutionLogs: (params: any) =>
+    request.get<any, Result<any>>('/api/patrol/routes/execution/logs', { params }),
+};
+
 export default request;

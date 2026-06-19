@@ -24,6 +24,7 @@ import PlateRecognitions from '@/pages/PlateRecognitions';
 import PolicePushes from '@/pages/PolicePushes';
 import PoliceSystemConfigs from '@/pages/PoliceSystemConfigs';
 import EdgeNodes from '@/pages/EdgeNodes';
+import VirtualPatrol from '@/pages/VirtualPatrol';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -232,6 +233,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <EdgeNodes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/virtual-patrol"
+          element={
+            <ProtectedRoute>
+              <VirtualPatrol />
             </ProtectedRoute>
           }
         />
