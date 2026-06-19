@@ -40,6 +40,7 @@ import { useNavigate } from 'react-router-dom';
 import { alertApi, workOrderApi, departmentApi, globalTrackApi, plateRecognitionApi, policePushApi } from '@/services/api';
 import { wsService } from '@/services/websocket';
 import { useAlertStore } from '@/store/alertStore';
+import EventReplayModal from '@/components/EventReplayModal';
 import {
   EVENT_TYPE_LABELS,
   EVENT_LEVEL_LABELS,
@@ -89,6 +90,7 @@ const Alerts: React.FC = () => {
   const [debrisCategories, setDebrisCategories] = useState<DebrisCategoryOption[]>([]);
   const [majorAlertModal, setMajorAlertModal] = useState(false);
   const [majorAlertInfo, setMajorAlertInfo] = useState<AlertEvent | null>(null);
+  const [replayModal, setReplayModal] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -455,12 +457,23 @@ const Alerts: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 280,
+      width: 320,
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
           <Tooltip title="查看详情">
             <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleView(record)} />
+          </Tooltip>
+          <Tooltip title="轨迹回放">
+            <Button
+              type="link"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              onClick={() => {
+                setCurrentAlert(record);
+                setReplayModal(true);
+              }}
+            />
           </Tooltip>
           {record.alertStatus === 0 && (
             <>
@@ -900,9 +913,21 @@ const Alerts: React.FC = () => {
             </div>
 
             <div style={{ marginTop: 24 }}>
-              <h4 style={{ marginBottom: 8 }}>
-                🚗 关联轨迹 ({linkedTracks.length})
-              </h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h4 style={{ marginBottom: 0 }}>
+                  🚗 关联轨迹 ({linkedTracks.length})
+                </h4>
+                {linkedTracks.length > 0 && currentAlert && (
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => setReplayModal(true)}
+                  >
+                    轨迹回放
+                  </Button>
+                )}
+              </div>
               {linkedTracks.length === 0 ? (
                 <div style={{ color: '#999', fontSize: 13, padding: '12px 0' }}>
                   暂无关联轨迹
@@ -935,14 +960,16 @@ const Alerts: React.FC = () => {
                     {
                       title: '操作',
                       render: (_, r: any) => (
-                        <Button
-                          type="link"
-                          size="small"
-                          icon={<CarOutlined />}
-                          onClick={() => handleViewTrack(r.id)}
-                        >
-                          查看轨迹
-                        </Button>
+                        <Space size={4}>
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<CarOutlined />}
+                            onClick={() => handleViewTrack(r.id)}
+                          >
+                            详情
+                          </Button>
+                        </Space>
                       ),
                     },
                   ]}
@@ -1075,6 +1102,12 @@ const Alerts: React.FC = () => {
           )}
         </div>
       </Modal>
+
+      <EventReplayModal
+        open={replayModal}
+        event={currentAlert}
+        onClose={() => setReplayModal(false)}
+      />
     </div>
   );
 };

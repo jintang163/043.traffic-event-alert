@@ -10,6 +10,8 @@ import com.traffic.alert.entity.EventTrackLink;
 import com.traffic.alert.entity.GlobalTrack;
 import com.traffic.alert.entity.TrackMatchLog;
 import com.traffic.alert.entity.TrackPoint;
+import com.traffic.alert.entity.AlertEvent;
+import com.traffic.alert.mapper.AlertEventMapper;
 import com.traffic.alert.mapper.EventTrackLinkMapper;
 import com.traffic.alert.mapper.GlobalTrackMapper;
 import com.traffic.alert.mapper.TrackMatchLogMapper;
@@ -35,6 +37,7 @@ public class GlobalTrackService {
     private final TrackPointMapper trackPointMapper;
     private final TrackMatchLogMapper trackMatchLogMapper;
     private final EventTrackLinkMapper eventTrackLinkMapper;
+    private final AlertEventMapper alertEventMapper;
     private final CameraService cameraService;
     @Lazy
     private final TrafficStatisticsService trafficStatisticsService;
@@ -479,6 +482,63 @@ public class GlobalTrackService {
         LambdaQueryWrapper<EventTrackLink> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(EventTrackLink::getEventId, eventId);
         return eventTrackLinkMapper.selectList(wrapper);
+    }
+
+    public Map<String, Object> getEventReplayData(Long eventId, int beforeMinutes) {
+        AlertEvent event = alertEventMapper.selectById(eventId);
+        if (event == null) {
+            throw new BusinessException("事件不存在");
+        }
+
+        List<EventTrackLink> links = listEventLinks(eventId);
+        if (links.isEmpty()) {
+            return Map.of(
+                    "event", event,
+                    "tracks", Collections.emptyList(),
+                    "trackPointsMap", Collections.emptyMap(),
+                    "beforeMinutes", beforeMinutes
+            );
+        }
+
+        LocalDateTime eventTime = event.getEventTime();
+        LocalDateTime startTime = eventTime.minusMinutes(beforeMinutes);
+        LocalDateTime endTime = eventTime.plusMinutes(1);
+
+        List<GlobalTrack> tracks = new ArrayList<>();
+        Map<Long, List<TrackPoint>> trackPointsMap = new LinkedHashMap<>();
+
+        for (EventTrackLink link : links) {
+            GlobalTrack track = getById(link.getTrackId());
+            if (track != null) {
+                tracks.add(track);
+
+                LambdaQueryWrapper<TrackPoint> pointWrapper = new LambdaQueryWrapper<>();
+                pointWrapper.eq(TrackPoint::getTrackId, link.getTrackId())
+                        .ge(TrackPoint::getFrameTime, startTime)
+                        .le(TrackPoint::getFrameTime, endTime)
+                        .orderByAsc(TrackPoint::getFrameTime);
+                List<TrackPoint> points = trackPointMapper.selectList(pointWrapper);
+                trackPointsMap.put(link.getTrackId(), points);
+            }
+        }
+
+        return Map.of(
+                "event", event,
+                "tracks", tracks,
+                "trackPointsMap", trackPointsMap,
+                "beforeMinutes", beforeMinutes,
+                "startTime", startTime,
+                "endTime", eventTime
+        );
+    }
+
+    public List<TrackPoint> listTrackPointsByTimeRange(Long trackId, LocalDateTime startTime, LocalDateTime endTime) {
+        LambdaQueryWrapper<TrackPoint> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TrackPoint::getTrackId, trackId)
+                .ge(TrackPoint::getFrameTime, startTime)
+                .le(TrackPoint::getFrameTime, endTime)
+                .orderByAsc(TrackPoint::getFrameTime);
+        return trackPointMapper.selectList(wrapper);
     }
 
     public GlobalTrack findOrCreateTrackFromEvent(String licensePlate, String reidFeature,

@@ -263,6 +263,8 @@ export const globalTrackApi = {
     request.get<any, Result<any>>(`/api/tracks/event-links/${eventId}`),
   linkEvent: (data: any) =>
     request.post<any, Result<any>>('/api/tracks/link-event', data),
+  eventReplay: (eventId: number, beforeMinutes = 5) =>
+    request.get<any, Result<any>>(`/api/tracks/event-replay/${eventId}`, { params: { beforeMinutes } }),
 };
 
 export const ruleApi = {

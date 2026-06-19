@@ -154,4 +154,12 @@ public class GlobalTrackController {
                 eventId, eventNo, trackId, trackNo, linkType, null, cameraId, trackPointId, description
         ));
     }
+
+    @Operation(summary = "获取事件轨迹回放数据（事件前N分钟）")
+    @GetMapping("/event-replay/{eventId}")
+    public Result<Map<String, Object>> getEventReplayData(
+            @PathVariable Long eventId,
+            @RequestParam(defaultValue = "5") int beforeMinutes) {
+        return Result.success(globalTrackService.getEventReplayData(eventId, beforeMinutes));
+    }
 }
