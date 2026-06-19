@@ -20,7 +20,10 @@ class LicensePlateResult(BaseModel):
     plate_color: Optional[str] = Field(None, description="车牌颜色")
     vehicle_color: Optional[str] = Field(None, description="车身颜色")
     vehicle_type: Optional[str] = Field(None, description="车辆类型")
-    bbox: Optional[List[float]] = Field(None, description="车牌区域")
+    bbox: Optional[List[float]] = Field(None, description="车牌区域 [x1,y1,x2,y2]")
+    scene_type: Optional[str] = Field(None, description="场景类型 normal/night/backlight")
+    enhance_gain: Optional[float] = Field(None, description="图像增强增益")
+    plate_image_base64: Optional[str] = Field(None, description="车牌截图 Base64")
 
 
 class MatchResult(BaseModel):

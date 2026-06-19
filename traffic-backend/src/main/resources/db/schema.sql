@@ -802,12 +802,15 @@ CREATE TABLE IF NOT EXISTS police_system_config (
     system_name VARCHAR(128) COMMENT '系统名称',
     push_url VARCHAR(512) COMMENT '推送接口地址',
     auth_type VARCHAR(32) DEFAULT 'NONE' COMMENT '认证方式 NONE/TOKEN/BASIC',
-    auth_token VARCHAR(512) COMMENT '认证Token或用户名:密码',
+    auth_token VARCHAR(512) COMMENT '认证Token',
+    basic_username VARCHAR(128) COMMENT 'Basic认证用户名',
+    basic_password VARCHAR(256) COMMENT 'Basic认证密码',
     enabled INT DEFAULT 1 COMMENT '是否启用',
     retry_max INT DEFAULT 5 COMMENT '最大重试次数',
     retry_initial_seconds INT DEFAULT 10 COMMENT '初始重试间隔(秒)',
     retry_multiplier DECIMAL(4,2) DEFAULT 2.00,
     retry_max_seconds INT DEFAULT 300,
+    timeout_seconds INT DEFAULT 10 COMMENT '请求超时(秒)',
     remark VARCHAR(512),
     create_time DATETIME,
     update_time DATETIME,
@@ -815,9 +818,10 @@ CREATE TABLE IF NOT EXISTS police_system_config (
     INDEX idx_system_code (system_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交警系统对接配置';
 
-INSERT INTO police_system_config (system_code, system_name, push_url, auth_type, enabled, retry_max, retry_initial_seconds, retry_multiplier, retry_max_seconds, remark, create_time) VALUES
-('TRAFFIC_POLICE_API', '省交警总队违法受理系统', 'https://police.example.com/api/v1/traffic-event/report', 'TOKEN', 0, 5, 10, 2.00, 300, '默认配置，需填入真实push_url和auth_token后启用', NOW()),
-('LOCAL_POLICE_BUREAU', '属地交警大队平台', 'https://local-police.example.com/api/event/upload', 'NONE', 0, 3, 30, 1.50, 600, '备用推送目标', NOW());
+INSERT INTO police_system_config (system_code, system_name, push_url, auth_type, enabled, retry_max, retry_initial_seconds, retry_multiplier, retry_max_seconds, timeout_seconds, remark, create_time) VALUES
+('POLICE_SANDBOX', '沙箱测试-本地Mock交警系统', 'http://localhost:8080/api/mock/police/webhook', 'NONE', 1, 5, 30, 2.00, 900, 10, '开箱即用的沙箱测试，指向自身Mock接口，用于验证逆行链路推送', NOW()),
+('TRAFFIC_POLICE_API', '省交警总队违法受理系统', 'https://police.example.com/api/v1/traffic-event/report', 'TOKEN', 0, 5, 10, 2.00, 300, 15, '默认配置，需填入真实push_url和auth_token后启用', NOW()),
+('LOCAL_POLICE_BUREAU', '属地交警大队平台', 'https://local-police.example.com/api/event/upload', 'NONE', 0, 3, 30, 1.50, 600, 15, '备用推送目标', NOW());
 
 INSERT INTO notify_template (template_code, template_name, channel_type, event_type, event_level, title_template, content_template, status, create_time) VALUES
 ('TPL_DINGTALK_REVERSE', '逆行-钉钉模板', 'DINGTALK', 'REVERSE', NULL, '逆行车辆告警', '【${levelText}】逆行车辆已识别车牌\n车牌号: ${plateNumber}(${plateColor})\n车辆类型: ${vehicleType}\n位置: ${location}\n摄像头: ${cameraName}\n时间: ${eventTime}\n置信度: ${confidence}%', 1, NOW()),

@@ -13,3 +13,5 @@ filterpy
 scikit-learn
 torch
 torchvision
+paddleocr>=2.7.0
+paddlepaddle>=2.5.0

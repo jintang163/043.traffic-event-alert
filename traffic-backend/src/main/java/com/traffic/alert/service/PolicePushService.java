@@ -172,22 +172,32 @@ public class PolicePushService {
         push.setPushTime(LocalDateTime.now());
         save(push);
         try {
-            if (cfg.getPushUrl() == null || cfg.getPushUrl().isEmpty() || cfg.getPushUrl().contains("example.com")) {
-                throw new RuntimeException("未配置真实push_url(当前为占位符example.com)，请在交警系统配置中填入真实地址");
+            if (cfg.getPushUrl() == null || cfg.getPushUrl().isEmpty()) {
+                throw new RuntimeException("push_url 未配置");
             }
+
+            int timeoutSec = cfg.getTimeoutSeconds() != null ? cfg.getTimeoutSeconds() : 10;
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(timeoutSec))
+                    .build();
 
             HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(cfg.getPushUrl()))
+                    .timeout(java.time.Duration.ofSeconds(timeoutSec))
                     .header("Content-Type", "application/json;charset=UTF-8");
+
             if ("TOKEN".equalsIgnoreCase(cfg.getAuthType()) && StringUtils.hasText(cfg.getAuthToken())) {
                 reqBuilder.header("Authorization", "Bearer " + cfg.getAuthToken());
-            } else if ("BASIC".equalsIgnoreCase(cfg.getAuthType()) && StringUtils.hasText(cfg.getAuthToken())) {
-                String encoded = Base64.getEncoder().encodeToString(cfg.getAuthToken().getBytes(StandardCharsets.UTF_8));
+            } else if ("BASIC".equalsIgnoreCase(cfg.getAuthType())) {
+                String username = cfg.getBasicUsername() != null ? cfg.getBasicUsername() : "";
+                String password = cfg.getBasicPassword() != null ? cfg.getBasicPassword() : "";
+                String basic = username + ":" + password;
+                String encoded = Base64.getEncoder().encodeToString(basic.getBytes(StandardCharsets.UTF_8));
                 reqBuilder.header("Authorization", "Basic " + encoded);
             }
             reqBuilder.POST(HttpRequest.BodyPublishers.ofString(push.getPushBody(), StandardCharsets.UTF_8));
 
-            HttpResponse<String> resp = httpClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = client.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
             long cost = System.currentTimeMillis() - startMs;
             push.setCostMs(cost);
             push.setResponseBody(truncate(resp.body(), 2000));

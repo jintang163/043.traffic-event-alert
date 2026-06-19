@@ -21,6 +21,10 @@ public class PoliceSystemConfig extends BaseEntity {
 
     private String authToken;
 
+    private String basicUsername;
+
+    private String basicPassword;
+
     private Integer enabled;
 
     private Integer retryMax;
@@ -30,6 +34,8 @@ public class PoliceSystemConfig extends BaseEntity {
     private BigDecimal retryMultiplier;
 
     private Integer retryMaxSeconds;
+
+    private Integer timeoutSeconds;
 
     private String remark;
 }

@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -71,6 +72,23 @@ public class MinioService {
         } catch (Exception e) {
             log.error("文件上传失败: {}", e.getMessage());
             throw new RuntimeException("文件上传失败: " + e.getMessage());
+        }
+    }
+
+    public String uploadBytes(String objectName, byte[] bytes, String contentType) {
+        ensureBucketExists();
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(minioConfig.getBucketName())
+                    .object(objectName)
+                    .stream(bis, bytes.length, -1)
+                    .contentType(contentType)
+                    .build());
+            log.info("字节流上传成功: {} (size={}KB)", objectName, bytes.length / 1024);
+            return getFileUrl(objectName);
+        } catch (Exception e) {
+            log.error("字节流上传失败: {}", e.getMessage());
+            throw new RuntimeException("字节流上传失败: " + e.getMessage());
         }
     }
 

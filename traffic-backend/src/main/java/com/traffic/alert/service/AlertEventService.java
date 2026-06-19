@@ -240,6 +240,18 @@ public class AlertEventService {
         if (plates == null || plates.isEmpty()) {
             return java.util.Collections.emptyList();
         }
+        String fullImageUrl = null;
+        try {
+            if (request.getSnapshotBase64() != null && !request.getSnapshotBase64().isEmpty()) {
+                byte[] imageBytes = Base64.getDecoder().decode(request.getSnapshotBase64());
+                String fileName = String.format("events/%s/full_%s.jpg",
+                        event.getEventNo(),
+                        java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("HHmmssSSS")));
+                fullImageUrl = minioService.uploadBytes(fileName, imageBytes, "image/jpeg");
+            }
+        } catch (Exception e) {
+            log.warn("上传事件全景图失败: eventNo={}, err={}", event.getEventNo(), e.getMessage());
+        }
         java.util.List<com.traffic.alert.entity.PlateRecognition> results = new java.util.ArrayList<>();
         for (java.util.Map<String, Object> plateMap : plates) {
             try {
@@ -249,6 +261,7 @@ public class AlertEventService {
                 pr.setCameraId(camera.getId());
                 pr.setCameraName(camera.getCameraName());
                 pr.setRecognizeTime(event.getEventTime());
+                pr.setFullImageUrl(fullImageUrl);
 
                 Object plateNumber = plateMap.get("plate_number") != null ? plateMap.get("plate_number") : plateMap.get("plateNumber");
                 if (plateNumber != null) pr.setPlateNumber(plateNumber.toString());
@@ -278,6 +291,24 @@ public class AlertEventService {
                 Object trackId = plateMap.get("track_id") != null ? plateMap.get("track_id") : plateMap.get("trackId");
                 if (trackId instanceof Number n) pr.setTrackId(n.intValue());
 
+                Object plateImageBase64 = plateMap.get("plate_image_base64") != null
+                        ? plateMap.get("plate_image_base64")
+                        : plateMap.get("plateImageBase64");
+                if (plateImageBase64 != null && !plateImageBase64.toString().isEmpty()) {
+                    try {
+                        byte[] bytes = Base64.getDecoder().decode(plateImageBase64.toString());
+                        String safePlate = pr.getPlateNumber() != null ? pr.getPlateNumber().replaceAll("[^A-Z0-9]", "") : "unknown";
+                        String fileName = String.format("plates/%s/%s_%s.jpg",
+                                event.getEventNo(),
+                                safePlate,
+                                java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("HHmmssSSS")));
+                        String plateImageUrl = minioService.uploadBytes(fileName, bytes, "image/jpeg");
+                        pr.setPlateImageUrl(plateImageUrl);
+                    } catch (Exception e) {
+                        log.warn("上传车牌截图失败: plate={}, err={}", pr.getPlateNumber(), e.getMessage());
+                    }
+                }
+
                 if (pr.getPlateNumber() != null && !pr.getPlateNumber().isEmpty()) {
                     plateRecognitionService.save(pr);
                     results.add(pr);
@@ -287,7 +318,10 @@ public class AlertEventService {
             }
         }
         if (!results.isEmpty()) {
-            log.info("保存车牌识别结果: eventNo={}, count={}", event.getEventNo(), results.size());
+            log.info("保存车牌识别结果: eventNo={}, count={}, plates={}",
+                    event.getEventNo(),
+                    results.size(),
+                    results.stream().map(p -> p.getPlateNumber() + "/" + p.getSceneType() + "/" + p.getEnhanceGain()).toList());
         }
         return results;
     }
