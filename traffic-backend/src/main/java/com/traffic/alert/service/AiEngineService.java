@@ -229,4 +229,28 @@ public class AiEngineService {
             return false;
         }
     }
+
+    public boolean updateWeatherInfo(Long cameraId, String weatherType) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/enhance/stream/" + cameraId + "/config";
+            Map<String, Object> body = Map.of(
+                    "external_weather", weatherType
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .PATCH(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body)))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("更新摄像头[{}]天气信息到AI引擎: weatherType={}, response={}",
+                    cameraId, weatherType, response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("更新摄像头[{}]天气信息到AI引擎失败: error={}", cameraId, e.getMessage());
+            return false;
+        }
+    }
 }

@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     BACKEND_TRACK_POINT_URL: str = Field(default="http://localhost:8080/api/tracks/points/batch", env="BACKEND_TRACK_POINT_URL")
     TRACK_POINT_PUSH_INTERVAL: float = Field(default=5.0, env="TRACK_POINT_PUSH_INTERVAL")
 
+    IMAGE_ENHANCEMENT_ENABLED: bool = Field(default=True, env="IMAGE_ENHANCEMENT_ENABLED")
+    IMAGE_ENHANCEMENT_AUTO_TRIGGER: bool = Field(default=True, env="IMAGE_ENHANCEMENT_AUTO_TRIGGER")
+    IMAGE_ENHANCEMENT_MIN_BRIGHTNESS: float = Field(default=60.0, env="IMAGE_ENHANCEMENT_MIN_BRIGHTNESS")
+    IMAGE_ENHANCEMENT_ALGORITHM: str = Field(default="auto", env="IMAGE_ENHANCEMENT_ALGORITHM")
+    IMAGE_ENHANCEMENT_BRIGHTNESS: float = Field(default=1.0, env="IMAGE_ENHANCEMENT_BRIGHTNESS")
+    IMAGE_ENHANCEMENT_CONTRAST: float = Field(default=1.0, env="IMAGE_ENHANCEMENT_CONTRAST")
+
+    WEATHER_DATA_ENABLED: bool = Field(default=False, env="WEATHER_DATA_ENABLED")
+    WEATHER_DATA_API_URL: str = Field(default="http://localhost:8080/api/weather/latest", env="WEATHER_DATA_API_URL")
+
     class Config:
         env_file = ".env"
         case_sensitive = True

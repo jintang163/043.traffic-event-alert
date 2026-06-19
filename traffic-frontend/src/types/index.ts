@@ -41,6 +41,7 @@ export interface Camera {
   onlineStatus: number;
   ptzEnabled: number;
   ptzPresets?: string;
+  locationCode?: string;
   description?: string;
   createTime?: string;
 }
@@ -1187,3 +1188,100 @@ export const PATROL_EXECUTION_STATUS_COLORS: Record<number, string> = {
   2: 'success',
   3: 'error',
 };
+
+export interface EnhancementAlgorithm {
+  name: string;
+  description: string;
+  scenarios: string[];
+}
+
+export interface SceneType {
+  type: string;
+  description: string;
+}
+
+export interface EnhancementAlgorithmsResponse {
+  algorithms: EnhancementAlgorithm[];
+  scene_types: SceneType[];
+}
+
+export interface EnhanceResponse {
+  success: boolean;
+  scene_type: string;
+  algorithm_used: string;
+  needs_enhancement: boolean;
+  score_gain: number;
+  brightness: number;
+  contrast: number;
+  processing_time: number;
+  enhanced_image_base64?: string;
+}
+
+export interface WeatherAnalysisResponse {
+  scene_type: string;
+  needs_enhancement: boolean;
+  recommended_algorithm: string;
+  brightness: number;
+  contrast: number;
+  processing_time: number;
+}
+
+export interface StreamEnhancementStatus {
+  enabled: boolean;
+  active: boolean;
+  autoTrigger: boolean;
+  algorithm: string;
+  brightness: number;
+  contrast: number;
+  sceneType: string;
+}
+
+export interface GlobalEnhancementConfig {
+  enabled: boolean;
+  autoTrigger: boolean;
+  defaultAlgorithm: string;
+  defaultBrightness: number;
+  defaultContrast: number;
+  minBrightness: number;
+  weatherDataEnabled: boolean;
+}
+
+export const ENHANCEMENT_ALGORITHM_OPTIONS = [
+  { value: 'auto', label: '自动选择' },
+  { value: 'retinex', label: 'Retinex增强(夜间)' },
+  { value: 'defog', label: '去雾增强(雨雾)' },
+  { value: 'clahe_gamma', label: 'CLAHE+伽马校正' },
+  { value: 'clahe_whitebalance', label: 'CLAHE+白平衡(逆光)' },
+];
+
+export const SCENE_TYPE_LABELS: Record<string, string> = {
+  normal: '正常光照',
+  night: '夜间/低光照',
+  backlight: '逆光',
+  rain: '雨天',
+  fog: '雾天',
+  snow: '雪天',
+};
+
+export const SCENE_TYPE_COLORS: Record<string, string> = {
+  normal: 'default',
+  night: 'geekblue',
+  backlight: 'orange',
+  rain: 'blue',
+  fog: 'default',
+  snow: 'cyan',
+};
+
+export interface CameraWeatherInfo {
+  weatherType: string;
+  weatherTypeLabel: string;
+  temperature?: number;
+  humidity?: number;
+  visibility: number;
+  windSpeed?: number;
+  precipitation?: number;
+  brightnessFactor: number;
+  needsEnhancement: boolean;
+  recordTime?: string;
+  locationName?: string;
+}

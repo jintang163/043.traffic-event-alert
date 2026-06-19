@@ -83,6 +83,10 @@ class StreamDetectionRequest(BaseModel):
     fps: int = Field(2, description="抽帧频率(帧/秒)")
     enableTrack: bool = Field(True, description="是否启用目标跟踪")
     enableEvent: bool = Field(True, description="是否启用事件检测")
+    enableEnhancement: Optional[bool] = Field(None, description="是否启用图像增强，None则使用系统配置")
+    enhancementAlgorithm: Optional[str] = Field(None, description="增强算法: auto/retinex/defog/clahe_gamma/clahe_whitebalance")
+    brightness: Optional[float] = Field(None, description="亮度调节 (0.5-2.0)", ge=0.5, le=2.0)
+    contrast: Optional[float] = Field(None, description="对比度调节 (0.5-2.0)", ge=0.5, le=2.0)
 
 
 class AiEventCallbackRequest(BaseModel):

@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { message } from 'antd';
-import type { Result } from '@/types';
+import type { Result, WeatherData, CameraWeatherInfo } from '@/types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -159,6 +159,32 @@ export const statisticsApi = {
     request.post<any, Result<any>>('/api/statistics/traffic/aggregate', null, { params }),
 };
 
+export const weatherApi = {
+  getLatest: (locationCode?: string) =>
+    request.get<Result<WeatherData>>(`/api/weather/latest`, {
+      params: locationCode ? { locationCode } : {},
+    }),
+
+  getLatestForCamera: (cameraId: number) =>
+    request.get<Result<CameraWeatherInfo>>(`/api/weather/camera/${cameraId}/latest`),
+
+  getLatestAll: () =>
+    request.get<Result<WeatherData[]>>('/api/weather/latest/all'),
+
+  getLocationCodes: () =>
+    request.get<Result<string[]>>('/api/weather/locations'),
+
+  getByTimeRange: (params: {
+    locationCode?: string;
+    startTime: string;
+    endTime: string;
+  }) =>
+    request.get<Result<WeatherData[]>>('/api/weather/range', { params }),
+
+  saveWeatherData: (data: Partial<WeatherData>) =>
+    request.post<Result<WeatherData>>('/api/weather', data),
+};
+
 export const aiApi = {
   detectImage: (file: File) => {
     const formData = new FormData();
@@ -167,12 +193,97 @@ export const aiApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  startStreamDetection: (data: { cameraId: number; streamUrl?: string }) =>
+  detectImageWithEnhancement: (
+    file: File,
+    params: {
+      enableEnhancement?: boolean;
+      enhancementAlgorithm?: string;
+      brightness?: number;
+      contrast?: number;
+      externalWeather?: string;
+    } = {}
+  ) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const queryParams = new URLSearchParams();
+    if (params.enableEnhancement) queryParams.append('enable_enhancement', 'true');
+    if (params.enhancementAlgorithm) queryParams.append('enhancement_algorithm', params.enhancementAlgorithm);
+    if (params.brightness !== undefined) queryParams.append('brightness', params.brightness.toString());
+    if (params.contrast !== undefined) queryParams.append('contrast', params.contrast.toString());
+    if (params.externalWeather) queryParams.append('external_weather', params.externalWeather);
+    const queryString = queryParams.toString();
+    return request.post<any, Result<any>>(
+      `/api/ai/detect/image${queryString ? `?${queryString}` : ''}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+  },
+  startStreamDetection: (data: { 
+    cameraId: number; 
+    streamUrl?: string;
+    enableEnhancement?: boolean;
+    enhancementAlgorithm?: string;
+    brightness?: number;
+    contrast?: number;
+  }) =>
     request.post<any, Result<any>>('/api/ai/detect/stream/start', data),
   stopStreamDetection: (cameraId: number) =>
     request.post<any, Result<any>>(`/api/ai/detect/stream/${cameraId}/stop`),
   eventCallback: (data: any) =>
     request.post<any, Result<any>>('/api/ai/event/callback', data),
+};
+
+export const enhanceApi = {
+  enhanceImage: (
+    file: File,
+    params: {
+      algorithm?: string;
+      brightness?: number;
+      contrast?: number;
+      externalWeather?: string;
+    } = {}
+  ) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const queryParams = new URLSearchParams();
+    if (params.algorithm) queryParams.append('algorithm', params.algorithm);
+    if (params.brightness !== undefined) queryParams.append('brightness', params.brightness.toString());
+    if (params.contrast !== undefined) queryParams.append('contrast', params.contrast.toString());
+    if (params.externalWeather) queryParams.append('external_weather', params.externalWeather);
+    const queryString = queryParams.toString();
+    return request.post<any, Result<any>>(
+      `/api/ai/enhance/image${queryString ? `?${queryString}` : ''}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+  },
+  analyzeWeather: (file: File, externalWeather?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const queryString = externalWeather ? `?external_weather=${encodeURIComponent(externalWeather)}` : '';
+    return request.post<any, Result<any>>(
+      `/api/ai/enhance/analyze${queryString}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+  },
+  getAlgorithms: () =>
+    request.get<any, Result<any>>('/api/ai/enhance/algorithms'),
+  getGlobalConfig: () =>
+    request.get<any, Result<any>>('/api/ai/enhance/config'),
+  updateStreamConfig: (
+    cameraId: number,
+    params: {
+      enableEnhancement?: boolean;
+      autoTrigger?: boolean;
+      algorithm?: string;
+      brightness?: number;
+      contrast?: number;
+    }
+  ) =>
+    request.post<any, Result<any>>(`/api/ai/enhance/stream/${cameraId}/config`, params),
+  getStreamStatus: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/ai/enhance/stream/${cameraId}/status`),
 };
 
 export const ptzPresetApi = {

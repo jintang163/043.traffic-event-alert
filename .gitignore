@@ -39,3 +39,4 @@ minio-data/
 
 # WeChat Mini Program
 miniprogram_npm/
+__pycache__/

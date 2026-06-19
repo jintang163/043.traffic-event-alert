@@ -43,5 +43,7 @@ public class Camera extends BaseEntity {
 
     private String ptzPresets;
 
+    private String locationCode;
+
     private String description;
 }

@@ -18,6 +18,7 @@ from app.core.event_analyzer import event_analyzer
 from app.core.tracker import get_tracker, reset_tracker, TrackState
 from app.core.cross_camera_tracker import cross_camera_tracker
 from app.core.feature_extractor import plate_recognizer, reid_extractor
+from app.core.image_enhancer import night_backlight_enhancer, WeatherCondition
 from app.schemas.event import AiEventCallbackRequest
 from app.schemas.reid import CrossCameraTrackRequest, LicensePlateResult, ReIDFeature
 
@@ -56,7 +57,11 @@ class StreamProcessor:
         stream_url: Optional[str] = None,
         fps: int = 2,
         enable_track: bool = True,
-        enable_event: bool = True
+        enable_event: bool = True,
+        enable_enhancement: Optional[bool] = None,
+        enhancement_algorithm: Optional[str] = None,
+        brightness: Optional[float] = None,
+        contrast: Optional[float] = None,
     ) -> Dict:
         with self._lock:
             if camera_id in self.active_streams:
@@ -67,12 +72,24 @@ class StreamProcessor:
                 fps=fps
             )
 
+            use_enhancement = enable_enhancement if enable_enhancement is not None else settings.IMAGE_ENHANCEMENT_ENABLED
+            use_auto_trigger = settings.IMAGE_ENHANCEMENT_AUTO_TRIGGER if enable_enhancement is None else (enable_enhancement and settings.IMAGE_ENHANCEMENT_AUTO_TRIGGER)
+
             stream_info = {
                 "camera_id": camera_id,
                 "stream_url": stream_url,
                 "fps": fps,
                 "enable_track": enable_track,
                 "enable_event": enable_event,
+                "enable_enhancement": use_enhancement,
+                "auto_trigger_enhancement": use_auto_trigger,
+                "enhancement_algorithm": enhancement_algorithm or settings.IMAGE_ENHANCEMENT_ALGORITHM,
+                "enhancement_brightness": brightness or settings.IMAGE_ENHANCEMENT_BRIGHTNESS,
+                "enhancement_contrast": contrast or settings.IMAGE_ENHANCEMENT_CONTRAST,
+                "current_scene_type": WeatherCondition.NORMAL,
+                "enhancement_active": False,
+                "weather_cache": None,
+                "last_weather_check": 0.0,
                 "running": True,
                 "frame_count": 0,
                 "start_time": time.time(),
@@ -200,9 +217,89 @@ class StreamProcessor:
         except Exception as e:
             logger.error(f"Stream processing error for camera {camera_id}: {e}", exc_info=True)
 
+    def _get_external_weather(self, stream_info: Dict) -> Optional[str]:
+        """获取外部天气数据"""
+        if not settings.WEATHER_DATA_ENABLED:
+            return None
+        
+        now = time.time()
+        if now - stream_info.get("last_weather_check", 0) < 300:
+            return stream_info.get("weather_cache")
+        
+        try:
+            import httpx
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(settings.WEATHER_DATA_API_URL)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    weather_type = data.get("data", {}).get("weatherType") or data.get("weatherType")
+                    stream_info["weather_cache"] = weather_type
+                    stream_info["last_weather_check"] = now
+                    return weather_type
+        except Exception as e:
+            logger.debug(f"Get weather data failed: {e}")
+        
+        return None
+
+    def _apply_image_enhancement(self, frame: np.ndarray, stream_info: Dict) -> Tuple[np.ndarray, bool, str]:
+        """应用图像增强
+        
+        Returns:
+            (处理后的帧, 是否应用了增强, 场景类型)
+        """
+        if not stream_info.get("enable_enhancement", False):
+            return frame, False, WeatherCondition.NORMAL
+        
+        external_weather = self._get_external_weather(stream_info)
+        analysis = night_backlight_enhancer.analyze_weather(frame, external_weather)
+        
+        scene_type = analysis["scene_type"]
+        stream_info["current_scene_type"] = scene_type
+        
+        should_enhance = False
+        if stream_info.get("auto_trigger_enhancement", True):
+            should_enhance = analysis["needs_enhancement"]
+        else:
+            should_enhance = True
+        
+        if not should_enhance:
+            stream_info["enhancement_active"] = False
+            return frame, False, scene_type
+        
+        try:
+            algo = stream_info.get("enhancement_algorithm", "auto")
+            if algo == "auto":
+                algo = None
+            
+            brightness = stream_info.get("enhancement_brightness", 1.0)
+            contrast = stream_info.get("enhancement_contrast", 1.0)
+            
+            enhanced_frame, _, score_gain = night_backlight_enhancer.enhance(
+                frame,
+                algorithm=algo,
+                brightness=brightness,
+                contrast=contrast,
+            )
+            
+            stream_info["enhancement_active"] = True
+            
+            if stream_info["frame_count"] % (stream_info["fps"] * 10) == 0:
+                logger.info(
+                    f"Camera {stream_info['camera_id']}: Applied {algo or analysis['recommended_algorithm']} "
+                    f"enhancement for {scene_type} scene, score_gain={score_gain}"
+                )
+            
+            return enhanced_frame, True, scene_type
+        except Exception as e:
+            logger.warning(f"Image enhancement failed: {e}")
+            stream_info["enhancement_active"] = False
+            return frame, False, scene_type
+
     def _process_frame(self, camera_id: int, frame: np.ndarray, stream_info: Dict):
         try:
-            detections = detector.detect(frame)
+            processed_frame, enhanced, scene_type = self._apply_image_enhancement(frame, stream_info)
+            
+            detections = detector.detect(processed_frame)
 
             tracked_objects = []
             if stream_info["enable_track"]:
@@ -227,24 +324,24 @@ class StreamProcessor:
                 events = event_analyzer.analyze(
                     camera_id=str(camera_id),
                     tracked_objects=tracked_objects,
-                    frame_width=frame.shape[1],
-                    frame_height=frame.shape[0],
-                    frame=frame,
+                    frame_width=processed_frame.shape[1],
+                    frame_height=processed_frame.shape[0],
+                    frame=processed_frame,
                 )
 
                 for event in events:
                     if not stream_info["recording_lock"].locked():
                         threading.Thread(
                             target=self._handle_event_with_video,
-                            args=(camera_id, event, frame, stream_info),
+                            args=(camera_id, event, processed_frame, stream_info),
                             daemon=True
                         ).start()
 
-            self._process_tracking_features(camera_id, frame, tracked_objects, stream_info)
+            self._process_tracking_features(camera_id, processed_frame, tracked_objects, stream_info)
 
-            self._check_lost_tracks(camera_id, frame, stream_info)
+            self._check_lost_tracks(camera_id, processed_frame, stream_info)
 
-            self._collect_track_points(camera_id, frame, tracked_objects, stream_info)
+            self._collect_track_points(camera_id, processed_frame, tracked_objects, stream_info)
 
             now = time.time()
             if now - stream_info["last_track_push"] >= settings.TRACK_POINT_PUSH_INTERVAL:
@@ -704,6 +801,15 @@ class StreamProcessor:
                         "fps": info["fps"],
                         "bufferSize": len(info["frame_buffer"].buffer),
                         "isRecording": info.get("is_recording", False),
+                        "enhancement": {
+                            "enabled": info.get("enable_enhancement", False),
+                            "active": info.get("enhancement_active", False),
+                            "autoTrigger": info.get("auto_trigger_enhancement", True),
+                            "algorithm": info.get("enhancement_algorithm", "auto"),
+                            "brightness": info.get("enhancement_brightness", 1.0),
+                            "contrast": info.get("enhancement_contrast", 1.0),
+                            "sceneType": info.get("current_scene_type", WeatherCondition.NORMAL),
+                        }
                     }
                 return {"cameraId": camera_id, "running": False}
 
@@ -716,6 +822,11 @@ class StreamProcessor:
                         "frameCount": info["frame_count"],
                         "startTime": datetime.fromtimestamp(info["start_time"]).isoformat(),
                         "bufferSize": len(info["frame_buffer"].buffer),
+                        "enhancement": {
+                            "enabled": info.get("enable_enhancement", False),
+                            "active": info.get("enhancement_active", False),
+                            "sceneType": info.get("current_scene_type", WeatherCondition.NORMAL),
+                        }
                     }
                     for cid, info in self.active_streams.items()
                 ]

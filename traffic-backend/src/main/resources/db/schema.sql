@@ -595,6 +595,9 @@ ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_priority INT DEFAULT N
 ALTER TABLE alert_event ADD COLUMN IF NOT EXISTS accident_evaluation_reasons TEXT DEFAULT NULL COMMENT '事故评估理由' AFTER accident_priority;
 ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_accident_severity (accident_severity);
 
+ALTER TABLE camera ADD COLUMN IF NOT EXISTS location_code VARCHAR(32) DEFAULT 'DEFAULT' COMMENT '区域编码' AFTER description;
+ALTER TABLE camera ADD INDEX IF NOT EXISTS idx_location_code (location_code);
+
 CREATE TABLE IF NOT EXISTS traffic_statistics (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     camera_id BIGINT,
