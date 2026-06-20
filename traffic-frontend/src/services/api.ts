@@ -397,6 +397,15 @@ export const ledSignApi = {
     request.get<any, Result<any>>('/api/led-sign/protocols'),
 };
 
+export const alertDedupApi = {
+  getStatus: () =>
+    request.get<any, Result<any>>('/api/alert-deduplication/status'),
+  releaseSuppression: (cameraId: number) =>
+    request.post<any, Result<boolean>>(`/api/alert-deduplication/release/${cameraId}`),
+  releaseAllSuppression: () =>
+    request.post<any, Result<void>>('/api/alert-deduplication/release-all'),
+};
+
 export const ruleApi = {
   fieldDefinitions: () =>
     request.get<any, Result<any>>('/api/rules/field-definitions'),

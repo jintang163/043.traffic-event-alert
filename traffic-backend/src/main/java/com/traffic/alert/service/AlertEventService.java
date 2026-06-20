@@ -52,6 +52,7 @@ public class AlertEventService {
     private final LedSignService ledSignService;
     private final CameraNeighborService cameraNeighborService;
     private final AiEngineService aiEngineService;
+    private final AlertDeduplicationService alertDeduplicationService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -101,6 +102,32 @@ public class AlertEventService {
 
     @Transactional
     public AlertEvent handleAiEventCallback(AiEventCallbackRequest request) {
+        AlertDeduplicationService.DeduplicationResult dedupResult = alertDeduplicationService.preProcess(request);
+
+        if (dedupResult.isSuppressed()) {
+            log.warn("告警被风暴抑制: cameraId={}, eventType={}, message={}",
+                    request.getCameraId(), request.getEventType(), dedupResult.getMessage());
+            AlertEvent suppressedEvent = new AlertEvent();
+            suppressedEvent.setEventType(request.getEventType());
+            suppressedEvent.setCameraId(request.getCameraId());
+            suppressedEvent.setEventNo("SUP_" + System.currentTimeMillis());
+            suppressedEvent.setDescription("[风暴抑制] " + dedupResult.getMessage());
+            suppressedEvent.setAlertStatus(0);
+            return suppressedEvent;
+        }
+
+        if (dedupResult.isMerged()) {
+            log.info("告警已合并: cameraId={}, eventType={}, originalEventId={}, message={}",
+                    request.getCameraId(), request.getEventType(),
+                    dedupResult.getOriginalEventId(), dedupResult.getMessage());
+            AlertEvent mergedEvent = new AlertEvent();
+            mergedEvent.setId(dedupResult.getOriginalEventId());
+            mergedEvent.setEventType(request.getEventType());
+            mergedEvent.setCameraId(request.getCameraId());
+            mergedEvent.setDescription("[合并] " + dedupResult.getMessage());
+            return mergedEvent;
+        }
+
         Camera camera = cameraService.getById(request.getCameraId());
         if (camera == null) {
             throw new BusinessException("摄像头不存在");
@@ -173,6 +200,7 @@ public class AlertEventService {
         }
 
         alertEventMapper.insert(event);
+        alertDeduplicationService.registerCreatedEvent(event);
         log.info("创建交通告警事件: eventNo={}, type={}, camera={}, level={}",
                 eventNo, request.getEventType(), camera.getCameraName(), event.getEventLevel());
 
