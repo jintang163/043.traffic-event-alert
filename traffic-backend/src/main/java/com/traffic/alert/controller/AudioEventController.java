@@ -56,4 +56,16 @@ public class AudioEventController {
     public Result<Map<String, Object>> statistics() {
         return Result.success(audioEventService.getStatistics());
     }
+
+    @Operation(summary = "获取AI引擎音频检测配置")
+    @GetMapping("/config")
+    public Result<Map<String, Object>> getAiAudioConfig() {
+        return Result.success(audioEventService.getAiEngineAudioConfig());
+    }
+
+    @Operation(summary = "更新AI引擎音频检测配置")
+    @PutMapping("/config")
+    public Result<Map<String, Object>> updateAiAudioConfig(@RequestBody Map<String, Object> configUpdate) {
+        return Result.success(audioEventService.updateAiEngineAudioConfig(configUpdate));
+    }
 }

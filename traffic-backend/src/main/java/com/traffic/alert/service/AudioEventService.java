@@ -1,8 +1,10 @@
 package com.traffic.alert.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.traffic.alert.config.AiEngineConfig;
 import com.traffic.alert.dto.AudioEventCallbackRequest;
 import com.traffic.alert.dto.AiEventCallbackRequest;
 import com.traffic.alert.entity.AlertEvent;
@@ -14,8 +16,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -27,6 +36,11 @@ public class AudioEventService {
     private final AlertEventMapper alertEventMapper;
     private final CameraService cameraService;
     private final AlertEventService alertEventService;
+    private final AiEngineConfig aiEngineConfig;
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(5000))
+            .build();
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -240,5 +254,94 @@ public class AudioEventService {
                 "sirenCount", sirenCount,
                 "linkedCount", linkedCount
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getAiEngineAudioConfig() {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/audio/config";
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                Map<String, Object> body = JSON.parseObject(response.body(), Map.class);
+                Map<String, Object> result = new HashMap<>(body);
+                result.put("aiEngineBaseUrl", aiEngineConfig.getBaseUrl());
+                result.put("backendProxy", true);
+                return result;
+            }
+            return fallbackConfig(response.statusCode(), response.body());
+        } catch (Exception e) {
+            log.warn("获取AI引擎音频配置失败(AI引擎可能未启动): {}", e.getMessage());
+            return fallbackConfig(0, e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> updateAiEngineAudioConfig(Map<String, Object> configUpdate) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/audio/config";
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .PUT(HttpRequest.BodyPublishers.ofString(
+                            JSON.toJSONString(configUpdate),
+                            StandardCharsets.UTF_8
+                    ))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                return JSON.parseObject(response.body(), Map.class);
+            }
+            return Map.of(
+                    "success", false,
+                    "error", "AI引擎返回非200状态: " + response.statusCode(),
+                    "detail", response.body()
+            );
+        } catch (Exception e) {
+            log.error("更新AI引擎音频配置失败: {}", e.getMessage());
+            return Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            );
+        }
+    }
+
+    private Map<String, Object> fallbackConfig(int httpStatus, String detail) {
+        Map<String, Object> defaults = new HashMap<>();
+        defaults.put("enabled", false);
+        defaults.put("sampleRate", 16000);
+        defaults.put("chunkSize", 1024);
+        defaults.put("channels", 1);
+        defaults.put("micArrayStrategy", "max_energy");
+        defaults.put("hornMinDuration", 1.5f);
+        defaults.put("hornMinDb", 75.0f);
+        defaults.put("hornDbAboveAmbient", 15.0f);
+        defaults.put("hornBandRatio", 0.30f);
+        defaults.put("collisionMinDb", 85.0f);
+        defaults.put("collisionDbAboveAmbient", 25.0f);
+        defaults.put("collisionImpulseMaxRise", 0.5f);
+        defaults.put("collisionRiseFallRatio", 0.30f);
+        defaults.put("sirenMinDuration", 2.0f);
+        defaults.put("sirenDbAboveAmbient", 15.0f);
+        defaults.put("sirenBandRatio", 0.40f);
+        defaults.put("eventCooldown", 30.0f);
+        defaults.put("ambientUpdateAlpha", 0.005f);
+
+        Map<String, Object> wrapper = new HashMap<>();
+        wrapper.put("fromFallback", true);
+        wrapper.put("aiEngineAvailable", false);
+        wrapper.put("httpStatus", httpStatus);
+        wrapper.put("detail", detail);
+        wrapper.put("config", defaults);
+        wrapper.putAll(defaults);
+        return wrapper;
     }
 }

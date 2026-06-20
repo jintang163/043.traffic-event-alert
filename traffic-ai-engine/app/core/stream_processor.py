@@ -22,6 +22,15 @@ from app.core.image_enhancer import night_backlight_enhancer, WeatherCondition
 from app.schemas.event import AiEventCallbackRequest, ConeDetectionCallbackRequest, AudioEventCallbackRequest, EventType, EventSeverity
 from app.schemas.reid import CrossCameraTrackRequest, LicensePlateResult, ReIDFeature
 
+try:
+    from app.core.audio_detector import AudioEventType
+except Exception:
+    class AudioEventType:
+        HORN = "HORN"
+        COLLISION = "COLLISION"
+        SIREN = "SIREN"
+        ABNORMAL_NOISE = "ABNORMAL_NOISE"
+
 logger = logging.getLogger(__name__)
 
 os.makedirs(settings.VIDEO_TEMP_DIR, exist_ok=True)
@@ -50,6 +59,8 @@ class StreamProcessor:
     def __init__(self):
         self.active_streams: Dict[int, Dict] = {}
         self._lock = threading.Lock()
+        self._audio_enhance_window = 5.0
+        self._audio_callback_registered: Dict[str, bool] = {}
 
     def start_stream(
         self,
@@ -103,6 +114,8 @@ class StreamProcessor:
                 "last_track_push": 0.0,
                 "lost_tracks": set(),
                 "registered_tracks": set(),
+                "immediate_audio_events": deque(maxlen=50),
+                "audio_event_lock": threading.Lock(),
             }
 
             reset_tracker(str(camera_id))
@@ -110,6 +123,31 @@ class StreamProcessor:
             if settings.AUDIO_DETECTION_ENABLED:
                 from app.core.audio_detector import audio_detector
                 audio_detector.start_audio_stream(str(camera_id))
+
+                def _audio_event_realtime_callback(audio_event):
+                    try:
+                        audio_event.camera_id = str(camera_id)
+                        is_collision = (
+                            getattr(audio_event, "event_type", None) == AudioEventType.COLLISION
+                        )
+                        if is_collision:
+                            with stream_info["audio_event_lock"]:
+                                stream_info["immediate_audio_events"].append(audio_event)
+                            logger.info(
+                                f"[Realtime] 碰撞声即时回调: camera={camera_id}, "
+                                f"db={audio_event.peak_db:.1f}, ts={audio_event.timestamp:.3f}"
+                            )
+                        threading.Thread(
+                            target=self._send_audio_event_callback,
+                            args=(camera_id, audio_event),
+                            daemon=True,
+                        ).start()
+                    except Exception as _e:
+                        logger.error(f"Realtime audio callback error: {_e}")
+
+                audio_detector.add_event_callback(_audio_event_realtime_callback)
+                self._audio_callback_registered[str(camera_id)] = True
+                stream_info["_audio_callback_fn"] = _audio_event_realtime_callback
 
             thread = threading.Thread(
                 target=self._process_stream_loop,
@@ -144,6 +182,13 @@ class StreamProcessor:
 
             if settings.AUDIO_DETECTION_ENABLED:
                 from app.core.audio_detector import audio_detector
+                callback_fn = stream_info.get("_audio_callback_fn")
+                if callback_fn is not None:
+                    try:
+                        audio_detector.remove_event_callback(callback_fn)
+                    except Exception:
+                        pass
+                self._audio_callback_registered.pop(str(camera_id), None)
                 audio_detector.stop_audio_stream(str(camera_id))
 
             reset_tracker(str(camera_id))
@@ -342,15 +387,61 @@ class StreamProcessor:
 
                 if settings.AUDIO_DETECTION_ENABLED:
                     from app.core.audio_detector import audio_detector
-                    audio_events = audio_detector.check_completed_events(str(camera_id))
-                    for audio_event in audio_events:
+
+                    audio_events_all: List = []
+                    now = time.time()
+                    used_event_keys: set = set()
+
+                    with stream_info["audio_event_lock"]:
+                        fresh_immediate = []
+                        for ae in stream_info["immediate_audio_events"]:
+                            age = now - getattr(ae, "timestamp", now)
+                            if age <= self._audio_enhance_window:
+                                fresh_immediate.append(ae)
+                            else:
+                                continue
+                        stream_info["immediate_audio_events"] = deque(
+                            [ae for ae in stream_info["immediate_audio_events"]
+                            if now - getattr(ae, "timestamp", now) <= self._audio_enhance_window],
+                            maxlen=50,
+                        )
+                        audio_events_all.extend(fresh_immediate)
+
+                    completed_events = audio_detector.check_completed_events(str(camera_id))
+                    for ce in completed_events:
+                        audio_events_all.append(ce)
                         threading.Thread(
                             target=self._send_audio_event_callback,
-                            args=(camera_id, audio_event),
+                            args=(camera_id, ce),
                             daemon=True
                         ).start()
 
-                        self._enhance_events_with_audio(events, audio_event)
+                    pending_from_detector = audio_detector.get_pending_events(
+                        str(camera_id),
+                        max_age_seconds=self._audio_enhance_window,
+                    )
+                    for pe in pending_from_detector:
+                        already = False
+                        for ae in audio_events_all:
+                            if (
+                                getattr(ae, "event_type", None) == getattr(pe, "event_type", None)
+                                and abs(getattr(ae, "timestamp", 0) - getattr(pe, "timestamp", 0)) < 0.5
+                            ):
+                                already = True
+                                break
+                        if not already:
+                            audio_events_all.append(pe)
+
+                    for audio_event in audio_events_all:
+                        self._enhance_events_with_audio(events, audio_event, used_event_keys)
+
+                    with stream_info["audio_event_lock"]:
+                        remaining = []
+                        for ae in stream_info["immediate_audio_events"]:
+                            key = f"{getattr(ae, 'event_type', '')}-{getattr(ae, 'timestamp', 0):.3f}"
+                            if key not in used_event_keys:
+                                remaining.append(ae)
+                        stream_info["immediate_audio_events"] = deque(remaining, maxlen=50)
 
                 for event in events:
                     if not stream_info["recording_lock"].locked():
@@ -919,26 +1010,57 @@ class StreamProcessor:
         except Exception as e:
             logger.error(f"Audio event callback send failed: {e}")
 
-    def _enhance_events_with_audio(self, events: List, audio_event):
+    def _enhance_events_with_audio(self, events: List, audio_event, used_event_keys: Optional[set] = None):
         if not events or not audio_event:
             return
 
         from app.schemas.event import TrafficEvent, EventSeverity
 
+        audio_ts = getattr(audio_event, "timestamp", time.time())
+        audio_type = getattr(audio_event, "event_type", "")
+        audio_key = f"{audio_type}-{audio_ts:.3f}"
+
+        enhanced_count = 0
+
         for event in events:
+            if not hasattr(event, "event_type"):
+                continue
+
+            event_ts = getattr(event, "timestamp", None)
+            if event_ts is not None:
+                try:
+                    if hasattr(event_ts, "timestamp"):
+                        event_ts_float = float(event_ts.timestamp())
+                    else:
+                        event_ts_float = float(event_ts)
+                except Exception:
+                    event_ts_float = time.time()
+            else:
+                event_ts_float = time.time()
+
+            time_diff = abs(event_ts_float - audio_ts)
+            if time_diff > self._audio_enhance_window:
+                continue
+
+            event_enhanced = False
+
             if audio_event.event_type == AudioEventType.COLLISION and event.event_type == EventType.ACCIDENT:
                 boost = min(0.15, audio_event.confidence * 0.15)
+                old_conf = event.confidence
                 event.confidence = min(0.99, event.confidence + boost)
                 if event.metadata is None:
                     event.metadata = {}
                 event.metadata["audio_collision_detected"] = True
                 event.metadata["audio_peak_db"] = audio_event.peak_db
                 event.metadata["audio_confidence"] = audio_event.confidence
+                event.metadata["audio_event_time_diff_sec"] = round(time_diff, 3)
                 if event.severity.value < EventSeverity.HIGH.value:
                     event.severity = EventSeverity.HIGH
+                event_enhanced = True
                 logger.info(
-                    f"Accident event enhanced by collision sound: camera={event.location.camera_id}, "
-                    f"confidence boosted from {event.confidence - boost:.3f} to {event.confidence:.3f}"
+                    f"[音视频时序增强] ACCIDENT事件增强: camera={getattr(event.location, 'camera_id', '?')}, "
+                    f"时序差={time_diff:.3f}s, 置信度 {old_conf:.3f}->{event.confidence:.3f}, "
+                    f"碰撞声分贝={audio_event.peak_db:.1f}dB"
                 )
 
             elif audio_event.event_type == AudioEventType.HORN and event.event_type == EventType.CONGESTION:
@@ -946,8 +1068,41 @@ class StreamProcessor:
                     event.metadata = {}
                 event.metadata["audio_horn_detected"] = True
                 event.metadata["horn_duration"] = audio_event.duration
+                event.metadata["audio_event_time_diff_sec"] = round(time_diff, 3)
                 event.description += f"；伴随长时间鸣笛({audio_event.duration:.1f}秒)"
-                logger.info(f"Congestion event enhanced by horn detection: camera={event.location.camera_id}")
+                event_enhanced = True
+                logger.info(
+                    f"[音视频时序增强] CONGESTION事件增强: camera={getattr(event.location, 'camera_id', '?')}, "
+                    f"时序差={time_diff:.3f}s, 鸣笛时长={audio_event.duration:.1f}s"
+                )
+
+            elif audio_event.event_type == AudioEventType.SIREN and event.event_type == EventType.ACCIDENT:
+                if event.metadata is None:
+                    event.metadata = {}
+                event.metadata["audio_siren_detected"] = True
+                event.metadata["siren_duration"] = audio_event.duration
+                event.metadata["audio_event_time_diff_sec"] = round(time_diff, 3)
+                boost = min(0.10, audio_event.confidence * 0.10)
+                event.confidence = min(0.99, event.confidence + boost)
+                event_enhanced = True
+                logger.info(
+                    f"[音视频时序增强] ACCIDENT+警笛: camera={getattr(event.location, 'camera_id', '?')}, "
+                    f"时序差={time_diff:.3f}s"
+                )
+
+            if event_enhanced:
+                enhanced_count += 1
+
+        if enhanced_count > 0 and used_event_keys is not None:
+            used_event_keys.add(audio_key)
+            logger.debug(
+                f"音频事件已用于增强 {enhanced_count} 个视频事件: type={audio_type}, ts={audio_ts:.3f}"
+            )
+        elif enhanced_count == 0:
+            logger.debug(
+                f"音频事件暂未匹配到可增强的视频事件(将在窗口内继续等待): "
+                f"type={audio_type}, ts={audio_ts:.3f}, 窗口={self._audio_enhance_window}s"
+            )
 
     def get_stream_status(self, camera_id: Optional[int] = None) -> Dict:
         with self._lock:

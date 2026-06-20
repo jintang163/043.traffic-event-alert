@@ -64,31 +64,44 @@ class AudioDetector:
         self.sample_rate = settings.AUDIO_SAMPLE_RATE
         self.chunk_size = settings.AUDIO_CHUNK_SIZE
         self.channels = settings.AUDIO_CHANNELS
+        self.mic_array_strategy = settings.AUDIO_MIC_ARRAY_STRATEGY
 
         self._active_streams: Dict[str, Dict] = {}
         self._lock = threading.Lock()
         self._event_callbacks: List = []
 
         self.horn_freq_range = (400, 3500)
-        self.horn_min_duration = 1.5
+        self.horn_min_duration = settings.AUDIO_HORN_MIN_DURATION
         self.horn_max_duration = 30.0
-        self.horn_min_db = 75.0
+        self.horn_min_db = settings.AUDIO_HORN_MIN_DB
+        self.horn_db_above_ambient = settings.AUDIO_HORN_DB_ABOVE_AMBIENT
+        self.horn_band_ratio = settings.AUDIO_HORN_BAND_RATIO
 
         self.collision_freq_range = (100, 800)
-        self.collision_impulse_duration_max = 0.5
-        self.collision_min_db = 85.0
+        self.collision_impulse_duration_max = settings.AUDIO_COLLISION_IMPULSE_MAX_RISE
+        self.collision_min_db = settings.AUDIO_COLLISION_MIN_DB
+        self.collision_db_above_ambient = settings.AUDIO_COLLISION_DB_ABOVE_AMBIENT
+        self.collision_rise_fall_ratio = settings.AUDIO_COLLISION_RISE_FALL_RATIO
 
         self.siren_freq_range = (500, 2500)
-        self.siren_min_duration = 2.0
+        self.siren_min_duration = settings.AUDIO_SIREN_MIN_DURATION
+        self.siren_db_above_ambient = settings.AUDIO_SIREN_DB_ABOVE_AMBIENT
+        self.siren_band_ratio = settings.AUDIO_SIREN_BAND_RATIO
 
         self.ambient_db = 50.0
-        self.ambient_update_alpha = 0.005
+        self.ambient_update_alpha = settings.AUDIO_AMBIENT_UPDATE_ALPHA
 
         self._cooldown_events: Dict[str, float] = {}
-        self._cooldown_seconds = 30.0
+        self._cooldown_seconds = settings.AUDIO_EVENT_COOLDOWN
 
     def add_event_callback(self, callback):
         self._event_callbacks.append(callback)
+
+    def remove_event_callback(self, callback):
+        try:
+            self._event_callbacks.remove(callback)
+        except ValueError:
+            pass
 
     def start_audio_stream(
         self,
@@ -107,12 +120,14 @@ class AudioDetector:
                 "running": True,
                 "thread": None,
                 "audio_buffer": deque(maxlen=self.sample_rate * 10),
+                "raw_multi_channel_buffer": deque(maxlen=self.sample_rate * 10),
                 "db_buffer": deque(maxlen=600),
                 "freq_history": deque(maxlen=100),
                 "last_event_time": {},
                 "start_time": time.time(),
                 "frame_count": 0,
                 "ambient_db": self.ambient_db,
+                "pending_events": deque(maxlen=50),
             }
 
             thread = threading.Thread(
@@ -124,7 +139,10 @@ class AudioDetector:
             thread.start()
 
             self._active_streams[camera_id] = stream_info
-            logger.info(f"Started audio stream: camera={camera_id}, device={device_index}")
+            logger.info(
+                f"Started audio stream: camera={camera_id}, device={device_index}, "
+                f"channels={self.channels}, strategy={self.mic_array_strategy}"
+            )
             return {"success": True, "message": f"Audio stream started for camera {camera_id}"}
 
     def stop_audio_stream(self, camera_id: str) -> Dict:
@@ -141,6 +159,26 @@ class AudioDetector:
             logger.info(f"Stopped audio stream: camera={camera_id}")
             return {"success": True, "message": f"Audio stream stopped for camera {camera_id}"}
 
+    def get_pending_events(self, camera_id: str, max_age_seconds: float = 5.0) -> List:
+        with self._lock:
+            if camera_id not in self._active_streams:
+                return []
+            stream_info = self._active_streams[camera_id]
+
+        now = time.time()
+        events = []
+        while stream_info["pending_events"]:
+            evt = stream_info["pending_events"][0]
+            if now - evt.timestamp <= max_age_seconds:
+                break
+            stream_info["pending_events"].popleft()
+        return list(stream_info["pending_events"])
+
+    def clear_pending_events(self, camera_id: str):
+        with self._lock:
+            if camera_id in self._active_streams:
+                self._active_streams[camera_id]["pending_events"].clear()
+
     def get_stream_status(self, camera_id: Optional[str] = None) -> Dict:
         with self._lock:
             if camera_id is not None:
@@ -152,6 +190,9 @@ class AudioDetector:
                         "startTime": datetime.fromtimestamp(info["start_time"]).isoformat(),
                         "frameCount": info["frame_count"],
                         "ambientDb": round(info["ambient_db"], 2),
+                        "channels": self.channels,
+                        "micStrategy": self.mic_array_strategy,
+                        "pendingEvents": len(info["pending_events"]),
                     }
                 return {"cameraId": camera_id, "running": False}
 
@@ -163,10 +204,43 @@ class AudioDetector:
                         "running": info["running"],
                         "frameCount": info["frame_count"],
                         "ambientDb": round(info["ambient_db"], 2),
+                        "channels": self.channels,
+                        "micStrategy": self.mic_array_strategy,
                     }
                     for cid, info in self._active_streams.items()
                 ],
             }
+
+    def _mix_multi_channel(self, multi_channel_data: np.ndarray) -> np.ndarray:
+        if multi_channel_data.ndim == 1:
+            return multi_channel_data
+
+        num_ch = multi_channel_data.shape[1] if multi_channel_data.ndim > 1 else 1
+        if num_ch == 1:
+            return multi_channel_data[:, 0] if multi_channel_data.ndim > 1 else multi_channel_data
+
+        strategy = self.mic_array_strategy.lower()
+
+        if strategy == "average":
+            return np.mean(multi_channel_data, axis=1).astype(np.float32)
+
+        elif strategy == "delay_and_sum":
+            center_ch = num_ch // 2
+            mixed = np.zeros(len(multi_channel_data), dtype=np.float32)
+            for ch in range(num_ch):
+                delay_samples = abs(ch - center_ch) * 2
+                if delay_samples == 0:
+                    mixed += multi_channel_data[:, ch].astype(np.float32)
+                elif ch < center_ch:
+                    mixed[delay_samples:] += multi_channel_data[:-delay_samples, ch].astype(np.float32)
+                else:
+                    mixed[:-delay_samples] += multi_channel_data[delay_samples:, ch].astype(np.float32)
+            return mixed / num_ch
+
+        else:
+            rms_per_ch = np.sqrt(np.mean(multi_channel_data.astype(np.float64) ** 2, axis=0))
+            best_ch = int(np.argmax(rms_per_ch))
+            return multi_channel_data[:, best_ch].astype(np.float32)
 
     def process_audio_chunk(
         self,
@@ -180,14 +254,16 @@ class AudioDetector:
         if len(audio_data) == 0:
             return events
 
-        rms = np.sqrt(np.mean(audio_data.astype(np.float64) ** 2))
+        mono_audio = self._mix_multi_channel(audio_data)
+
+        rms = np.sqrt(np.mean(mono_audio.astype(np.float64) ** 2))
         db = 20 * math.log10(rms + 1e-10) if rms > 0 else 0
 
-        window_size = min(len(audio_data), sr)
+        window_size = min(len(mono_audio), sr)
         if window_size < 64:
             return events
 
-        windowed = audio_data[:window_size].astype(np.float64)
+        windowed = mono_audio[:window_size].astype(np.float64)
         windowed = windowed * np.hanning(window_size)
 
         fft_data = np.abs(np.fft.rfft(windowed))
@@ -214,13 +290,19 @@ class AudioDetector:
             stream_info["ambient_db"] = stream_info["ambient_db"] * (1 - alpha) + db * alpha
 
         horn_events = self._detect_horn(camera_id, db, dominant_freq, freqs, fft_data, sr)
-        events.extend(horn_events)
+        for evt in horn_events:
+            events.append(evt)
+            stream_info["pending_events"].append(evt)
 
-        collision_events = self._detect_collision(camera_id, audio_data, db, dominant_freq, freqs, fft_data, sr)
-        events.extend(collision_events)
+        collision_events = self._detect_collision(camera_id, mono_audio, db, dominant_freq, freqs, fft_data, sr)
+        for evt in collision_events:
+            events.append(evt)
+            stream_info["pending_events"].append(evt)
 
         siren_events = self._detect_siren(camera_id, db, dominant_freq, freqs, fft_data, sr)
-        events.extend(siren_events)
+        for evt in siren_events:
+            events.append(evt)
+            stream_info["pending_events"].append(evt)
 
         return events
 
@@ -246,7 +328,7 @@ class AudioDetector:
         if not (freq_min <= dominant_freq <= freq_max):
             return events
 
-        if db < max(self.horn_min_db, ambient + 15):
+        if db < max(self.horn_min_db, ambient + self.horn_db_above_ambient):
             return events
 
         freq_mask = (freqs >= freq_min) & (freqs <= freq_max)
@@ -254,7 +336,7 @@ class AudioDetector:
         total_energy = np.sum(fft_data[1:] ** 2) if len(fft_data) > 1 else 1
         band_ratio = band_energy / total_energy if total_energy > 0 else 0
 
-        if band_ratio < 0.3:
+        if band_ratio < self.horn_band_ratio:
             return events
 
         now = time.time()
@@ -304,7 +386,7 @@ class AudioDetector:
                     confidence=confidence,
                     duration=duration,
                     peak_db=horn_info["peak_db"],
-                    avg_db=stream_info["ambient_db"] + 15,
+                    avg_db=stream_info["ambient_db"] + self.horn_db_above_ambient,
                     dominant_freq=horn_info["dominant_freq"],
                     timestamp=horn_info["start_time"],
                     camera_id=camera_id,
@@ -313,6 +395,7 @@ class AudioDetector:
                         "peak_db": round(horn_info["peak_db"], 2),
                         "dominant_freq_hz": round(horn_info["dominant_freq"], 2),
                         "ambient_db": round(stream_info["ambient_db"], 2),
+                        "db_above_ambient": round(horn_info["peak_db"] - stream_info["ambient_db"], 2),
                     },
                 )
                 events.append(event)
@@ -343,7 +426,7 @@ class AudioDetector:
 
         ambient = stream_info["ambient_db"]
 
-        if db < max(self.collision_min_db, ambient + 25):
+        if db < max(self.collision_min_db, ambient + self.collision_db_above_ambient):
             return events
 
         freq_min, freq_max = self.collision_freq_range
@@ -365,8 +448,8 @@ class AudioDetector:
 
         is_impulse = (
             rise_time < self.collision_impulse_duration_max
-            and rise_fall_ratio < 0.3
-            and db > ambient + 20
+            and rise_fall_ratio < self.collision_rise_fall_ratio
+            and db > ambient + (self.collision_db_above_ambient - 5)
         )
 
         if not is_impulse:
@@ -376,7 +459,10 @@ class AudioDetector:
         if self._is_in_cooldown(event_key):
             return events
 
-        confidence = min(0.95, 0.65 + (db - ambient - 20) / 50 * 0.3)
+        confidence = min(
+            0.95,
+            0.65 + max(0.0, (db - ambient - self.collision_db_above_ambient)) / 40.0 * 0.3
+        )
 
         event = AudioEvent(
             event_type=AudioEventType.COLLISION,
@@ -427,7 +513,7 @@ class AudioDetector:
         if not (freq_min <= dominant_freq <= freq_max):
             return events
 
-        if db < ambient + 15:
+        if db < ambient + self.siren_db_above_ambient:
             return events
 
         freq_mask = (freqs >= freq_min) & (freqs <= freq_max)
@@ -438,7 +524,7 @@ class AudioDetector:
         total_energy = np.sum(fft_data[1:] ** 2) if len(fft_data) > 1 else 1
         band_ratio = band_energy / total_energy if total_energy > 0 else 0
 
-        if band_ratio < 0.4:
+        if band_ratio < self.siren_band_ratio:
             return events
 
         peaks = np.argsort(fft_data[freq_mask])[-3:]
@@ -498,7 +584,7 @@ class AudioDetector:
                     confidence=confidence,
                     duration=duration,
                     peak_db=siren_info["peak_db"],
-                    avg_db=stream_info["ambient_db"] + 15,
+                    avg_db=stream_info["ambient_db"] + self.siren_db_above_ambient,
                     dominant_freq=siren_info["dominant_freq"],
                     timestamp=siren_info["start_time"],
                     camera_id=camera_id,
@@ -506,6 +592,7 @@ class AudioDetector:
                         "siren_duration": round(duration, 2),
                         "peak_db": round(siren_info["peak_db"], 2),
                         "dominant_freq_hz": round(siren_info["dominant_freq"], 2),
+                        "ambient_db": round(stream_info["ambient_db"], 2),
                     },
                 )
                 events.append(event)
@@ -521,6 +608,12 @@ class AudioDetector:
         events: List[AudioEvent] = []
         events.extend(self._check_horn_completion(camera_id))
         events.extend(self._check_siren_completion(camera_id))
+
+        with self._lock:
+            if camera_id in self._active_streams:
+                stream_info = self._active_streams[camera_id]
+                for evt in events:
+                    stream_info["pending_events"].append(evt)
         return events
 
     def _audio_stream_loop(self, stream_info: Dict):
@@ -532,22 +625,29 @@ class AudioDetector:
             import sounddevice as sd
 
             device_index = stream_info.get("device_index")
+            num_channels = self.channels if self.channels >= 1 else 1
 
             def audio_callback(indata, frames, time_info, status):
                 if status:
                     logger.debug(f"Audio stream status: {status}")
-                stream_info["audio_buffer"].extend(indata[:, 0].tolist())
+                stream_info["raw_multi_channel_buffer"].extend(indata.tolist())
+                mixed = self._mix_multi_channel(indata)
+                stream_info["audio_buffer"].extend(mixed.tolist())
                 stream_info["frame_count"] += 1
 
             stream = sd.InputStream(
                 device=device_index,
-                channels=1,
+                channels=num_channels,
                 samplerate=self.sample_rate,
                 blocksize=self.chunk_size,
+                dtype="float32",
                 callback=audio_callback,
             )
             stream.start()
-            logger.info(f"Audio capture started: camera={camera_id}")
+            logger.info(
+                f"Audio capture started: camera={camera_id}, "
+                f"device={device_index}, channels={num_channels}, sr={self.sample_rate}"
+            )
 
         except ImportError:
             logger.warning("sounddevice not available, using simulated audio")
@@ -621,6 +721,37 @@ class AudioDetector:
             return True
         self._cooldown_events[event_key] = now
         return False
+
+    def get_threshold_config(self) -> Dict:
+        return {
+            "horn": {
+                "freq_range": list(self.horn_freq_range),
+                "min_duration": self.horn_min_duration,
+                "min_db": self.horn_min_db,
+                "db_above_ambient": self.horn_db_above_ambient,
+                "band_ratio": self.horn_band_ratio,
+            },
+            "collision": {
+                "freq_range": list(self.collision_freq_range),
+                "impulse_max_rise": self.collision_impulse_duration_max,
+                "min_db": self.collision_min_db,
+                "db_above_ambient": self.collision_db_above_ambient,
+                "rise_fall_ratio": self.collision_rise_fall_ratio,
+            },
+            "siren": {
+                "freq_range": list(self.siren_freq_range),
+                "min_duration": self.siren_min_duration,
+                "db_above_ambient": self.siren_db_above_ambient,
+                "band_ratio": self.siren_band_ratio,
+            },
+            "general": {
+                "cooldown_seconds": self._cooldown_seconds,
+                "ambient_update_alpha": self.ambient_update_alpha,
+                "mic_array_strategy": self.mic_array_strategy,
+                "channels": self.channels,
+                "sample_rate": self.sample_rate,
+            },
+        }
 
 
 audio_detector = AudioDetector()

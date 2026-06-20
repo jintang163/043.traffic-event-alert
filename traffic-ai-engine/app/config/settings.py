@@ -68,11 +68,21 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = Field(default=16000, env="AUDIO_SAMPLE_RATE")
     AUDIO_CHUNK_SIZE: int = Field(default=1024, env="AUDIO_CHUNK_SIZE")
     AUDIO_CHANNELS: int = Field(default=1, env="AUDIO_CHANNELS")
+    AUDIO_MIC_ARRAY_STRATEGY: str = Field(default="max_energy", env="AUDIO_MIC_ARRAY_STRATEGY")
     AUDIO_CALLBACK_URL: str = Field(default="http://localhost:8080/api/ai/audio/callback", env="AUDIO_CALLBACK_URL")
     AUDIO_HORN_MIN_DURATION: float = Field(default=1.5, env="AUDIO_HORN_MIN_DURATION")
     AUDIO_HORN_MIN_DB: float = Field(default=75.0, env="AUDIO_HORN_MIN_DB")
+    AUDIO_HORN_DB_ABOVE_AMBIENT: float = Field(default=15.0, env="AUDIO_HORN_DB_ABOVE_AMBIENT")
+    AUDIO_HORN_BAND_RATIO: float = Field(default=0.30, env="AUDIO_HORN_BAND_RATIO")
     AUDIO_COLLISION_MIN_DB: float = Field(default=85.0, env="AUDIO_COLLISION_MIN_DB")
+    AUDIO_COLLISION_DB_ABOVE_AMBIENT: float = Field(default=25.0, env="AUDIO_COLLISION_DB_ABOVE_AMBIENT")
+    AUDIO_COLLISION_IMPULSE_MAX_RISE: float = Field(default=0.5, env="AUDIO_COLLISION_IMPULSE_MAX_RISE")
+    AUDIO_COLLISION_RISE_FALL_RATIO: float = Field(default=0.30, env="AUDIO_COLLISION_RISE_FALL_RATIO")
+    AUDIO_SIREN_MIN_DURATION: float = Field(default=2.0, env="AUDIO_SIREN_MIN_DURATION")
+    AUDIO_SIREN_DB_ABOVE_AMBIENT: float = Field(default=15.0, env="AUDIO_SIREN_DB_ABOVE_AMBIENT")
+    AUDIO_SIREN_BAND_RATIO: float = Field(default=0.40, env="AUDIO_SIREN_BAND_RATIO")
     AUDIO_EVENT_COOLDOWN: float = Field(default=30.0, env="AUDIO_EVENT_COOLDOWN")
+    AUDIO_AMBIENT_UPDATE_ALPHA: float = Field(default=0.005, env="AUDIO_AMBIENT_UPDATE_ALPHA")
 
     class Config:
         env_file = ".env"

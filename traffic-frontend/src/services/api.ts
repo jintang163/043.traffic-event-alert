@@ -701,6 +701,10 @@ export const audioEventApi = {
     request.get<any, Result<any>>(`/api/ai/audio/${id}`),
   statistics: () =>
     request.get<any, Result<any>>('/api/ai/audio/statistics'),
+  getConfig: () =>
+    request.get<any, Result<any>>('/api/ai/audio/config'),
+  updateConfig: (data: any) =>
+    request.put<any, Result<any>>('/api/ai/audio/config', data),
 };
 
 export default request;

@@ -23,6 +23,7 @@ import {
   SendOutlined,
   SafetyOutlined,
   ThunderboltOutlined,
+  AudioOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -130,6 +131,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: '/event-videos',
       icon: <PlayCircleOutlined />,
       label: '事件视频',
+    },
+    {
+      key: '/audio-events',
+      icon: <AudioOutlined />,
+      label: '音频异常事件',
     },
     {
       key: 'sub_rule_engine',
