@@ -41,6 +41,8 @@ export interface Camera {
   onlineStatus: number;
   ptzEnabled: number;
   ptzPresets?: string;
+  roadRegionPixel?: string;
+  ledConfig?: string;
   locationCode?: string;
   description?: string;
   createTime?: string;

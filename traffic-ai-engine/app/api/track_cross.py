@@ -102,3 +102,29 @@ async def get_handover_history(limit: int = Query(100, ge=1, le=1000)):
         "count": min(limit, len(cross_camera_tracker._track_handover_history)),
         "history": cross_camera_tracker._track_handover_history[-limit:]
     }
+
+
+@router.post("/trigger-pedestrian-track")
+async def trigger_pedestrian_tracking(request: dict):
+    source_camera_id = str(request.get("sourceCameraId", ""))
+    track_id = str(request.get("trackId", ""))
+    neighbor_ids = request.get("neighborCameraIds", [])
+
+    if not source_camera_id:
+        raise HTTPException(status_code=400, detail="sourceCameraId is required")
+
+    neighbor_strs = [str(nid) for nid in neighbor_ids] if neighbor_ids else []
+
+    result = cross_camera_tracker.trigger_pedestrian_alert_tracking(
+        source_camera_id=source_camera_id,
+        track_id=track_id,
+        neighbor_camera_ids=neighbor_strs
+    )
+
+    return {
+        "status": "success",
+        "sourceCameraId": source_camera_id,
+        "trackId": track_id,
+        "neighborCameraIds": neighbor_strs,
+        "result": result
+    }

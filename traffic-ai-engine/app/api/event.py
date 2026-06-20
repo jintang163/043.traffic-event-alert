@@ -195,3 +195,39 @@ async def get_event_statistics():
             stats["last_24h"] += 1
 
     return stats
+
+
+@router.post("/pedestrian-intrusion/road-region/{camera_id}")
+async def set_pedestrian_road_region(camera_id: str, request: dict):
+    from typing import List, Tuple
+    road_region_pixel = request.get("roadRegionPixel", "")
+    if not road_region_pixel:
+        event_analyzer.clear_road_region(camera_id)
+        return {"status": "success", "message": f"Camera {camera_id} road region cleared", "camera_id": camera_id}
+
+    import json
+    try:
+        points = json.loads(road_region_pixel)
+        region = [(float(p[0]), float(p[1])) for p in points]
+        event_analyzer.set_road_region(camera_id, region)
+        return {
+            "status": "success",
+            "message": f"Camera {camera_id} road region updated",
+            "camera_id": camera_id,
+            "points_count": len(region)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid road region format: {str(e)}")
+
+
+@router.get("/pedestrian-intrusion/road-region/{camera_id}")
+async def get_pedestrian_road_region(camera_id: str):
+    region = event_analyzer.get_road_region(camera_id)
+    if region is None:
+        return {"status": "success", "camera_id": camera_id, "road_region": None, "is_default": True}
+    return {
+        "status": "success",
+        "camera_id": camera_id,
+        "road_region": [[p[0], p[1]] for p in region],
+        "is_default": False
+    }

@@ -351,5 +351,44 @@ class GlobalCrossCameraTracker:
             if len(self._track_handover_history) > 1000:
                 self._track_handover_history = self._track_handover_history[-500:]
 
+    def trigger_pedestrian_alert_tracking(
+        self,
+        source_camera_id: str,
+        track_id: str,
+        neighbor_camera_ids: List[str]
+    ) -> dict:
+        with self._lock:
+            if source_camera_id and neighbor_camera_ids:
+                existing = set(self._camera_neighbors.get(source_camera_id, []))
+                existing.update(neighbor_camera_ids)
+                self._camera_neighbors[source_camera_id] = list(existing)
+
+            pedestrian_tracks = [
+                gid for gid, rec in self._active_tracks.items()
+                if rec.camera_id == source_camera_id and rec.class_name == "person"
+            ]
+
+            for gid in pedestrian_tracks:
+                rec = self._active_tracks[gid]
+                rec.is_event_target = True
+                rec.linked_event_count += 1
+
+            result = {
+                "source_camera": source_camera_id,
+                "source_track_id": track_id,
+                "neighbor_cameras": list(neighbor_camera_ids) if neighbor_camera_ids else [],
+                "marked_pedestrian_tracks": pedestrian_tracks,
+                "marked_count": len(pedestrian_tracks),
+                "timestamp": time.time()
+            }
+
+            logger.info(
+                f"行人闯入告警触发跨摄像头追踪: camera={source_camera_id}, "
+                f"track={track_id}, neighbors={neighbor_camera_ids}, "
+                f"marked_tracks={len(pedestrian_tracks)}"
+            )
+
+            return result
+
 
 cross_camera_tracker = GlobalCrossCameraTracker()

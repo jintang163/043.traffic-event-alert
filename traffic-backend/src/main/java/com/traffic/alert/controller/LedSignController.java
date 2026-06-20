@@ -73,4 +73,17 @@ public class LedSignController {
         boolean success = ledSignService.setBrightness(cameraId, brightness);
         return Result.success(success);
     }
+
+    @Operation(summary = "刷新LED设备实际状态")
+    @PostMapping("/refresh/{cameraId}")
+    public Result<Boolean> refreshStatus(@PathVariable Long cameraId) {
+        boolean success = ledSignService.refreshDeviceStatus(cameraId);
+        return Result.success(success);
+    }
+
+    @Operation(summary = "获取支持的LED协议列表")
+    @GetMapping("/protocols")
+    public Result<java.util.List<String>> getSupportedProtocols() {
+        return Result.success(ledSignService.getSupportedProtocols());
+    }
 }

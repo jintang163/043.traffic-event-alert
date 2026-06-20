@@ -376,7 +376,8 @@ class EventAnalyzer:
         frame_height: int
     ) -> List[Tuple[float, float]]:
         if camera_id in self.pedestrian_road_regions:
-            return self.pedestrian_road_regions[camera_id]
+            normalized = self.pedestrian_road_regions[camera_id]
+            return [(x * frame_width, y * frame_height) for (x, y) in normalized]
 
         default_region = [
             (0, int(frame_height * 0.35)),
@@ -386,8 +387,17 @@ class EventAnalyzer:
         ]
         return default_region
 
+    def get_road_region(self, camera_id: str) -> Optional[List[Tuple[float, float]]]:
+        return self.pedestrian_road_regions.get(camera_id)
+
     def set_road_region(self, camera_id: str, region_points: List[Tuple[float, float]]):
         self.pedestrian_road_regions[camera_id] = region_points
+        logger.info(f"已设置摄像头[{camera_id}]行车道区域: {len(region_points)}个顶点 (归一化坐标)")
+
+    def clear_road_region(self, camera_id: str):
+        if camera_id in self.pedestrian_road_regions:
+            del self.pedestrian_road_regions[camera_id]
+            logger.info(f"已清除摄像头[{camera_id}]行车道区域配置，将使用默认区域")
 
     def _is_point_in_polygon(self, x: float, y: float, polygon: List[Tuple[float, float]]) -> bool:
         n = len(polygon)

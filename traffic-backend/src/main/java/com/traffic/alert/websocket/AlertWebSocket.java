@@ -132,4 +132,21 @@ public class AlertWebSocket {
     public static int getOnlineCount() {
         return ONLINE_COUNT.get();
     }
+
+    public static void sendTrackUpdateEvent(Map<String, Object> trackEvent) {
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("type", "TRACK_UPDATE");
+        payload.put("data", trackEvent);
+        payload.put("timestamp", System.currentTimeMillis());
+        broadcastMessage(JSON.toJSONString(payload));
+    }
+
+    public static void sendLedStatusUpdate(Long cameraId, Map<String, Object> ledStatus) {
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("type", "LED_STATUS_UPDATE");
+        payload.put("cameraId", cameraId);
+        payload.put("data", ledStatus);
+        payload.put("timestamp", System.currentTimeMillis());
+        broadcastMessage(JSON.toJSONString(payload));
+    }
 }

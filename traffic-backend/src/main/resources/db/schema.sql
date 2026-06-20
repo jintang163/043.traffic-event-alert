@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS camera (
     online_status INT DEFAULT 0,
     ptz_enabled INT DEFAULT 0,
     ptz_presets TEXT,
+    road_region_pixel TEXT COMMENT '行车道区域像素坐标JSON [[x,y],...] 归一化值0~1，用于行人闯入检测',
+    led_config TEXT COMMENT '路侧LED情报板配置JSON {protocol, host, port, deviceId,...}',
     description VARCHAR(512),
     create_time DATETIME,
     update_time DATETIME,

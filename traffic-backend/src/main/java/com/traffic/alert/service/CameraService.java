@@ -143,6 +143,15 @@ public class CameraService {
                 } catch (Exception e) {
                     log.warn("摄像头[{}]同步相邻摄像头到AI引擎失败: {}", camera.getId(), e.getMessage());
                 }
+
+                try {
+                    if (camera.getRoadRegionPixel() != null && !camera.getRoadRegionPixel().isEmpty()) {
+                        aiEngineService.setRoadRegion(camera.getId(), camera.getRoadRegionPixel());
+                        log.info("摄像头[{}]启动检测后同步行车道区域到AI引擎", camera.getId());
+                    }
+                } catch (Exception e) {
+                    log.warn("摄像头[{}]同步行车道区域到AI引擎失败: {}", camera.getId(), e.getMessage());
+                }
             }
         } else if (!isNew && before != null && before.getStatus() == 1 && camera.getStatus() != null && camera.getStatus() == 0) {
             try {
@@ -406,6 +415,74 @@ public class CameraService {
         } catch (Exception e) {
             log.warn("设置预置位失败: cameraId={}, presetIndex={}, err={}", cameraId, presetIndex, e.getMessage());
             return false;
+        }
+    }
+
+    @Transactional
+    public boolean setRoadRegion(Long cameraId, String roadRegionPixel) {
+        Camera camera = getById(cameraId);
+        if (camera == null) {
+            throw new BusinessException("摄像头不存在");
+        }
+        camera.setRoadRegionPixel(roadRegionPixel);
+        cameraMapper.updateById(camera);
+
+        boolean synced = aiEngineService.setRoadRegion(cameraId, roadRegionPixel);
+        log.info("设置摄像头[{}]行车道区域并同步AI引擎: synced={}, region={}", cameraId, synced, roadRegionPixel);
+        return true;
+    }
+
+    public List<List<Double>> getRoadRegion(Long cameraId) {
+        Camera camera = getById(cameraId);
+        if (camera == null) {
+            throw new BusinessException("摄像头不存在");
+        }
+        String regionJson = camera.getRoadRegionPixel();
+        if (regionJson == null || regionJson.isEmpty()) {
+            return List.of();
+        }
+        try {
+            return JSON.parseArray(regionJson, List.class);
+        } catch (Exception e) {
+            log.warn("解析摄像头[{}]行车道区域失败: {}", cameraId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public boolean syncRoadRegionToEngine(Long cameraId) {
+        Camera camera = getById(cameraId);
+        if (camera == null) {
+            return false;
+        }
+        return aiEngineService.setRoadRegion(cameraId, camera.getRoadRegionPixel());
+    }
+
+    @Transactional
+    public boolean setLedConfig(Long cameraId, String ledConfig) {
+        Camera camera = getById(cameraId);
+        if (camera == null) {
+            throw new BusinessException("摄像头不存在");
+        }
+        camera.setLedConfig(ledConfig);
+        cameraMapper.updateById(camera);
+        log.info("设置摄像头[{}]LED情报板配置: {}", cameraId, ledConfig);
+        return true;
+    }
+
+    public Map<String, Object> getLedConfig(Long cameraId) {
+        Camera camera = getById(cameraId);
+        if (camera == null) {
+            throw new BusinessException("摄像头不存在");
+        }
+        String configJson = camera.getLedConfig();
+        if (configJson == null || configJson.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            return JSON.parseObject(configJson, Map.class);
+        } catch (Exception e) {
+            log.warn("解析摄像头[{}]LED配置失败: {}", cameraId, e.getMessage());
+            return Map.of();
         }
     }
 }

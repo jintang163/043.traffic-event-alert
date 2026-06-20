@@ -391,6 +391,10 @@ export const ledSignApi = {
     request.put<any, Result<any>>(`/api/led-sign/default-message/${cameraId}`, { message }),
   setBrightness: (cameraId: number, brightness: number) =>
     request.put<any, Result<any>>(`/api/led-sign/brightness/${cameraId}`, { brightness }),
+  refreshStatus: (cameraId: number) =>
+    request.post<any, Result<any>>(`/api/led-sign/refresh/${cameraId}`),
+  getProtocols: () =>
+    request.get<any, Result<any>>('/api/led-sign/protocols'),
 };
 
 export const ruleApi = {

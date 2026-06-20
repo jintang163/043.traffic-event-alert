@@ -52,6 +52,8 @@ export interface WebSocketMessage {
 type MessageHandler = (message: WebSocketMessage) => void;
 type AlertHandler = (alert: WsAlertEvent) => void;
 type DetectionHandler = (cameraId: number, data: DetectionMessage) => void;
+type LedStatusHandler = (data: any) => void;
+type TrackUpdateHandler = (data: any) => void;
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080';
 
@@ -63,6 +65,8 @@ class WebSocketService {
   private alertHandlers: Set<AlertHandler> = new Set();
   private majorAlertHandlers: Set<AlertHandler> = new Set();
   private detectionHandlers: Map<number, Set<DetectionHandler>> = new Map();
+  private ledStatusHandlers: Map<number, Set<LedStatusHandler>> = new Map();
+  private trackUpdateHandlers: Set<TrackUpdateHandler> = new Set();
   private subscribedCameras: Set<number> = new Set();
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
@@ -211,6 +215,30 @@ class WebSocketService {
           });
         }
       }
+
+      if (message.type === 'LED_STATUS_UPDATE' && message.cameraId !== undefined && message.data) {
+        const camId = Number(message.cameraId);
+        const handlers = this.ledStatusHandlers.get(camId);
+        if (handlers) {
+          handlers.forEach((handler) => {
+            try {
+              handler(message);
+            } catch (e) {
+              console.error('[WS] LED status handler error:', e);
+            }
+          });
+        }
+      }
+
+      if (message.type === 'TRACK_UPDATE' && message.data) {
+        this.trackUpdateHandlers.forEach((handler) => {
+          try {
+            handler(message.data);
+          } catch (e) {
+            console.error('[WS] Track update handler error:', e);
+          }
+        });
+      }
     } catch (e) {
       console.error('[WS] Parse message error:', e, body);
     }
@@ -301,6 +329,27 @@ class WebSocketService {
   onMajorAlert(handler: AlertHandler) {
     this.majorAlertHandlers.add(handler);
     return () => this.majorAlertHandlers.delete(handler);
+  }
+
+  onLedStatusUpdate(cameraId: number, handler: LedStatusHandler) {
+    if (!this.ledStatusHandlers.has(cameraId)) {
+      this.ledStatusHandlers.set(cameraId, new Set());
+    }
+    this.ledStatusHandlers.get(cameraId)!.add(handler);
+    return () => {
+      const handlers = this.ledStatusHandlers.get(cameraId);
+      if (handlers) {
+        handlers.delete(handler);
+        if (handlers.size === 0) {
+          this.ledStatusHandlers.delete(cameraId);
+        }
+      }
+    };
+  }
+
+  onTrackUpdate(handler: TrackUpdateHandler) {
+    this.trackUpdateHandlers.add(handler);
+    return () => this.trackUpdateHandlers.delete(handler);
   }
 
   isConnected() {

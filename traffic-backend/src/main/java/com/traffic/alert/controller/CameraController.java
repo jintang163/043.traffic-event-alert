@@ -71,4 +71,36 @@ public class CameraController {
     public Result<Map<String, Object>> getStatistics() {
         return Result.success(cameraService.getStatistics());
     }
+
+    @Operation(summary = "获取摄像头行车道区域")
+    @GetMapping("/{id}/road-region")
+    public Result<Object> getRoadRegion(@PathVariable Long id) {
+        return Result.success(cameraService.getRoadRegion(id));
+    }
+
+    @Operation(summary = "设置摄像头行车道区域")
+    @PutMapping("/{id}/road-region")
+    public Result<Boolean> setRoadRegion(@PathVariable Long id, @RequestBody Map<String, Object> params) {
+        String roadRegionPixel = (String) params.get("roadRegionPixel");
+        return Result.success(cameraService.setRoadRegion(id, roadRegionPixel));
+    }
+
+    @Operation(summary = "同步行车道区域到AI引擎")
+    @PostMapping("/{id}/road-region/sync")
+    public Result<Boolean> syncRoadRegion(@PathVariable Long id) {
+        return Result.success(cameraService.syncRoadRegionToEngine(id));
+    }
+
+    @Operation(summary = "获取摄像头LED情报板配置")
+    @GetMapping("/{id}/led-config")
+    public Result<Map<String, Object>> getLedConfig(@PathVariable Long id) {
+        return Result.success(cameraService.getLedConfig(id));
+    }
+
+    @Operation(summary = "设置摄像头LED情报板配置")
+    @PutMapping("/{id}/led-config")
+    public Result<Boolean> setLedConfig(@PathVariable Long id, @RequestBody Map<String, Object> params) {
+        String ledConfig = (String) params.get("ledConfig");
+        return Result.success(cameraService.setLedConfig(id, ledConfig));
+    }
 }

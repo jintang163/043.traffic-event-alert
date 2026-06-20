@@ -253,4 +253,54 @@ public class AiEngineService {
             return false;
         }
     }
+
+    public boolean setRoadRegion(Long cameraId, String roadRegionPixel) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/events/pedestrian-intrusion/road-region/" + cameraId;
+            Map<String, Object> body = Map.of(
+                    "cameraId", cameraId,
+                    "roadRegionPixel", roadRegionPixel != null ? roadRegionPixel : ""
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body)))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("同步摄像头[{}]行车道区域到AI引擎: response={}", cameraId, response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("同步摄像头[{}]行车道区域到AI引擎失败: error={}", cameraId, e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean triggerPedestrianTracking(Long cameraId, String trackId, List<Long> neighborCameraIds) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/track-cross/trigger-pedestrian-track";
+            Map<String, Object> body = Map.of(
+                    "sourceCameraId", cameraId,
+                    "trackId", trackId != null ? trackId : "",
+                    "neighborCameraIds", neighborCameraIds != null ? neighborCameraIds : List.of()
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body)))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("触发行人跨摄像头追踪: cameraId={}, trackId={}, neighbors={}, response={}",
+                    cameraId, trackId, neighborCameraIds, response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("触发行人跨摄像头追踪失败: cameraId={}, error={}", cameraId, e.getMessage());
+            return false;
+        }
+    }
 }

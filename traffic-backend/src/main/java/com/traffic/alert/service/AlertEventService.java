@@ -50,6 +50,8 @@ public class AlertEventService {
     private final PlateRecognitionService plateRecognitionService;
     private final PolicePushService policePushService;
     private final LedSignService ledSignService;
+    private final CameraNeighborService cameraNeighborService;
+    private final AiEngineService aiEngineService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -194,6 +196,12 @@ public class AlertEventService {
                 log.info("行人闯入事件联动LED情报板: cameraId={}, eventNo={}", camera.getId(), eventNo);
             } catch (Exception e) {
                 log.warn("行人闯入LED情报板联动失败: eventNo={}, error={}", eventNo, e.getMessage());
+            }
+
+            try {
+                triggerAdjacentCameraTracking(event, camera, request);
+            } catch (Exception e) {
+                log.warn("行人闯入联动相邻摄像头追踪失败: eventNo={}, error={}", eventNo, e.getMessage());
             }
         }
 
@@ -800,5 +808,99 @@ public class AlertEventService {
         }
 
         return videoUrl;
+    }
+
+    private void triggerAdjacentCameraTracking(AlertEvent event, Camera camera, AiEventCallbackRequest request) {
+        String eventNo = event.getEventNo();
+        Long cameraId = camera.getId();
+
+        List<CameraNeighbor> neighbors = cameraNeighborService.listByCameraId(cameraId);
+        if (neighbors == null || neighbors.isEmpty()) {
+            log.info("行人闯入事件无相邻摄像头配置，跳过跨摄像头追踪: eventNo={}, cameraId={}", eventNo, cameraId);
+            return;
+        }
+
+        log.info("行人闯入事件触发相邻摄像头追踪: eventNo={}, cameraId={}, neighborCount={}",
+                eventNo, cameraId, neighbors.size());
+
+        String trackId = extractPedestrianTrackId(request);
+        List<Long> neighborIds = neighbors.stream()
+                .map(CameraNeighbor::getNeighborCameraId)
+                .toList();
+
+        aiEngineService.triggerPedestrianTracking(cameraId, trackId, neighborIds);
+
+        for (CameraNeighbor neighbor : neighbors) {
+            try {
+                if (neighbor.getPriority() != null && neighbor.getPriority() <= 2) {
+                    ptzCruiseService.pauseCruiseForEvent(neighbor.getNeighborCameraId());
+                    log.info("相邻摄像头[{}]已暂停巡航，等待行人目标: eventNo={}", neighbor.getNeighborCameraId(), eventNo);
+                }
+            } catch (Exception e) {
+                log.warn("相邻摄像头[{}]暂停巡航失败: eventNo={}, error={}", neighbor.getNeighborCameraId(), eventNo, e.getMessage());
+            }
+        }
+
+        enrichTrackWithNeighborCameras(event, trackId, neighbors, request);
+
+        AlertWebSocket.sendTrackUpdateEvent(Map.of(
+                "eventNo", eventNo,
+                "eventType", event.getEventType(),
+                "sourceCameraId", cameraId,
+                "trackId", trackId != null ? trackId : "",
+                "neighborCameraIds", neighborIds,
+                "action", "PEDESTRIAN_TRACK_INITIATED",
+                "timestamp", LocalDateTime.now().toString()
+        ));
+
+        log.info("行人闯入相邻摄像头追踪触发完成: eventNo={}, trackId={}, neighbors={}",
+                eventNo, trackId, neighborIds);
+    }
+
+    private String extractPedestrianTrackId(AiEventCallbackRequest request) {
+        if (request.getTrackData() == null || request.getTrackData().isEmpty()) {
+            return null;
+        }
+        for (Map<String, Object> track : request.getTrackData()) {
+            Object classId = track.get("class_id") != null ? track.get("class_id") : track.get("classId");
+            Object className = track.get("class_name") != null ? track.get("class_name") : track.get("className");
+            boolean isPerson = (classId != null && "0".equals(String.valueOf(classId)))
+                    || (className != null && "person".equalsIgnoreCase(String.valueOf(className)));
+            if (isPerson) {
+                Object tid = track.get("track_id") != null ? track.get("track_id") : track.get("trackId");
+                return tid != null ? String.valueOf(tid) : null;
+            }
+        }
+        return null;
+    }
+
+    private void enrichTrackWithNeighborCameras(AlertEvent event, String trackId,
+                                                List<CameraNeighbor> neighbors, AiEventCallbackRequest request) {
+        try {
+            if (request.getTrackData() != null && !request.getTrackData().isEmpty()) {
+                for (Map<String, Object> track : request.getTrackData()) {
+                    Object reidFeature = track.get("reid_feature") != null
+                            ? track.get("reid_feature") : track.get("reidFeature");
+                    if (reidFeature != null) {
+                        log.debug("行人闯入检测到ReID特征，用于跨摄像头匹配: eventNo={}", event.getEventNo());
+                        break;
+                    }
+                }
+            }
+
+            StringBuilder extraDesc = new StringBuilder();
+            extraDesc.append("已联动").append(neighbors.size()).append("个相邻摄像头追踪: ");
+            for (CameraNeighbor n : neighbors) {
+                extraDesc.append(n.getNeighborCameraName()).append("(ID:").append(n.getNeighborCameraId()).append(")、");
+            }
+            if (extraDesc.length() > 0) {
+                extraDesc.deleteCharAt(extraDesc.length() - 1);
+            }
+            String currentDesc = event.getDescription() != null ? event.getDescription() : "";
+            event.setDescription(currentDesc + (currentDesc.isEmpty() ? "" : "；") + extraDesc);
+            alertEventMapper.updateById(event);
+        } catch (Exception e) {
+            log.warn("补齐行人轨迹数据失败: eventNo={}, error={}", event.getEventNo(), e.getMessage());
+        }
     }
 }

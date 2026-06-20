@@ -45,5 +45,9 @@ public class Camera extends BaseEntity {
 
     private String locationCode;
 
+    private String roadRegionPixel;
+
+    private String ledConfig;
+
     private String description;
 }
