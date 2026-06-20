@@ -20,7 +20,9 @@ const StormSuppression: React.FC = () => {
     setLoading(true);
     try {
       const res: any = await alertDedupApi.getStatus();
-      if (res?.stormSuppressedCameras && setStormSuppressedList(res.stormSuppressedCameras);
+      if (res?.stormSuppressedCameras) {
+        setStormSuppressedList(res.stormSuppressedCameras);
+      }
       setStats(res);
     } catch (e: any) {
       message.error('加载状态失败');
@@ -31,7 +33,7 @@ const StormSuppression: React.FC = () => {
 
   useEffect(() => {
     loadStatus();
-    const timer = setInterval(() => setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     const unsub1 = wsService.onStormAlert((data) => {
       addStormSuppressed(data);
       loadStatus();
@@ -52,7 +54,7 @@ const StormSuppression: React.FC = () => {
   const handleRelease = async (cameraId: number, cameraName?: string) => {
     Modal.confirm({
       title: '解除风暴抑制',
-      content: `确认手动解除摄像头 ${cameraName || cameraId} 的风暴抑制？',
+      content: `确认手动解除摄像头 ${cameraName || cameraId} 的风暴抑制？`,
       okText: '确认解除',
       okType: 'danger',
       cancelText: '取消',
@@ -95,12 +97,12 @@ const StormSuppression: React.FC = () => {
 
   const formatRemaining = (until: string) => {
     const diff = Math.max(0, dayjs(until).valueOf() - now);
-    const total = dayjs(until).diff(dayjs(until).subtract(5, 'minute'), 0;
+    const total = dayjs(until).diff(dayjs(until).subtract(5, 'minute'), 'second');
     const percent = total > 0 ? Math.min(100, Math.max(0, (diff / total) * 100)) : 0;
     const secs = Math.floor(diff / 1000);
     const mm = Math.floor(secs / 60);
     const ss = secs % 60;
-    return { text: `${mm}:${String(ss).padStart(2, '0'}, percent };
+    return { text: `${mm}:${String(ss).padStart(2, '0')}`, percent };
   };
 
   const dataSource: StormSuppressedCamera[] = Array.from(stormSuppressedCameras.values());
@@ -190,7 +192,7 @@ const StormSuppression: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="滑动窗口(60秒)
+              title="滑动窗口(60秒)"
               value={stats?.windowAlertCount || 0}
               suffix="条告警"
             />
@@ -259,6 +261,7 @@ const StormSuppression: React.FC = () => {
           <li><b>自动恢复</b>：抑制期结束后自动恢复接收告警，也可手动解除。</li>
         </ul>
       </Card>
+      </Space>
     </div>
   );
 };

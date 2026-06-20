@@ -1473,6 +1473,125 @@ INSERT INTO video_health_diagnosis (diagnosis_no, camera_id, camera_name, camera
     0.00, 0, 86400,
     2, '摄像头疑似故障(黑屏)，请立即派员现场维修', NOW());
 
-ALTER TABLE alert_event MODIFY COLUMN event_type VARCHAR(32) COMMENT '事件类型: ACCIDENT/REVERSE/DEBRIS/PEDESTRIAN_INTRUSION/BLACK_SCREEN/VIDEO_BLUR/VIDEO_OCCLUSION/VIDEO_FREEZE/VIDEO_QUALITY_ABNORMAL';
+ALTER TABLE alert_event MODIFY COLUMN event_type VARCHAR(32) COMMENT '事件类型: ACCIDENT/REVERSE/DEBRIS/PEDESTRIAN_INTRUSION/BLACK_SCREEN/VIDEO_BLUR/VIDEO_OCCLUSION/VIDEO_FREEZE/VIDEO_QUALITY_ABNORMAL/DRIVER_PHONE_CALL/DRIVER_YAWNING/DRIVER_FATIGUE/DRIVER_DISTRACTION';
 ALTER TABLE alert_event ADD INDEX IF NOT EXISTS idx_event_type_quality (event_type);
+
+-- ==================================================================
+-- 驾驶员行为检测记录表
+-- ==================================================================
+CREATE TABLE IF NOT EXISTS driver_behavior_record (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    record_no VARCHAR(32) NOT NULL UNIQUE COMMENT '检测记录编号',
+    camera_id BIGINT NOT NULL COMMENT '摄像头ID(车内摄像头)',
+    camera_name VARCHAR(128) COMMENT '摄像头名称',
+    camera_code VARCHAR(64) COMMENT '摄像头编号',
+    road_name VARCHAR(128) COMMENT '路段名称',
+    longitude DECIMAL(10,6) COMMENT '经度',
+    latitude DECIMAL(10,6) COMMENT '纬度',
+
+    detect_time DATETIME COMMENT '检测时间',
+    algorithm_version VARCHAR(32) COMMENT '算法版本',
+
+    is_phone_call TINYINT DEFAULT 0 COMMENT '是否打电话 0-否 1-是',
+    phone_call_confidence DECIMAL(5,2) COMMENT '打电话置信度 0-100',
+    phone_call_region VARCHAR(255) COMMENT '打电话区域坐标 JSON',
+
+    is_yawning TINYINT DEFAULT 0 COMMENT '是否打哈欠 0-否 1-是',
+    yawning_confidence DECIMAL(5,2) COMMENT '打哈欠置信度 0-100',
+    mouth_open_ratio DECIMAL(5,2) COMMENT '嘴巴张开比例',
+
+    is_fatigued TINYINT DEFAULT 0 COMMENT '是否疲劳 0-否 1-是',
+    fatigue_confidence DECIMAL(5,2) COMMENT '疲劳置信度 0-100',
+    eye_aspect_ratio DECIMAL(5,2) COMMENT '眼睛纵横比',
+    perclos_score DECIMAL(5,2) COMMENT 'PERCLOS疲劳评分 0-100',
+
+    is_distracted TINYINT DEFAULT 0 COMMENT '是否分心 0-否 1-是',
+    distraction_confidence DECIMAL(5,2) COMMENT '分心置信度 0-100',
+    head_pose_yaw DECIMAL(5,2) COMMENT '头部偏航角',
+    head_pose_pitch DECIMAL(5,2) COMMENT '头部俯仰角',
+
+    overall_score DECIMAL(5,2) COMMENT '综合驾驶状态评分 0-100',
+    behavior_level TINYINT DEFAULT 1 COMMENT '驾驶状态等级 1-优秀 2-良好 3-一般 4-较差 5-危险',
+
+    is_abnormal TINYINT DEFAULT 0 COMMENT '是否异常 0-否 1-是',
+    abnormal_types VARCHAR(128) COMMENT '异常类型,多个用逗号分隔',
+    description VARCHAR(512) COMMENT '检测描述',
+
+    alert_triggered TINYINT DEFAULT 0 COMMENT '是否触发告警 0-否 1-是',
+    alert_event_id BIGINT COMMENT '关联告警事件ID',
+    led_reminded TINYINT DEFAULT 0 COMMENT '是否LED提醒 0-否 1-是',
+    led_remind_result VARCHAR(255) COMMENT 'LED提醒结果',
+
+    is_real_frame TINYINT DEFAULT 0 COMMENT '是否真实帧检测 0-否(模拟) 1-是',
+    frame_capture_cost_ms BIGINT DEFAULT 0 COMMENT '帧抓取耗时毫秒',
+    detection_duration_ms INT DEFAULT 0 COMMENT '检测耗时毫秒',
+
+    remark VARCHAR(512) COMMENT '备注',
+    create_time DATETIME,
+    update_time DATETIME,
+    deleted INT DEFAULT 0,
+
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_detect_time (detect_time),
+    INDEX idx_is_abnormal (is_abnormal),
+    INDEX idx_behavior_level (behavior_level),
+    INDEX idx_record_no (record_no),
+    INDEX idx_alert_triggered (alert_triggered),
+    INDEX idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='驾驶员行为检测记录表';
+
+-- 插入模拟数据
+INSERT INTO driver_behavior_record (record_no, camera_id, camera_name, camera_code, road_name, longitude, latitude,
+    detect_time, algorithm_version,
+    is_phone_call, phone_call_confidence,
+    is_yawning, yawning_confidence, mouth_open_ratio,
+    is_fatigued, fatigue_confidence, eye_aspect_ratio, perclos_score,
+    is_distracted, distraction_confidence, head_pose_yaw, head_pose_pitch,
+    overall_score, behavior_level,
+    is_abnormal, abnormal_types, description,
+    alert_triggered, led_reminded, is_real_frame, detection_duration_ms,
+    create_time) VALUES
+('DBR202506200001', 1, '车内摄像头#1-司机位', 'CAM-IN-001', '京藏高速K50+200', 116.407400, 39.914200,
+    NOW(), 'v1.0.0-java-pure',
+    0, 5.50,
+    0, 3.20, 0.15,
+    0, 8.50, 0.28, 12.50,
+    0, 10.50, 2.5, 1.2,
+    92.50, 1,
+    0, NULL, '驾驶状态良好，注意力集中',
+    0, 0, 1, 45,
+    NOW()),
+('DBR202506200002', 2, '车内摄像头#2-副驾驶', 'CAM-IN-002', '京藏高速K50+200', 116.407500, 39.914200,
+    NOW(), 'v1.0.0-java-pure',
+    1, 85.50,
+    0, 5.20, 0.18,
+    0, 15.50, 0.26, 18.50,
+    1, 78.50, 25.5, 3.2,
+    35.50, 4,
+    1, 'PHONE_CALL,DISTRACTION', '检测到驾驶员正在使用手机，存在分心驾驶风险',
+    1, 1, 1, 52,
+    NOW()),
+('DBR202506200003', 1, '车内摄像头#1-司机位', 'CAM-IN-001', '京藏高速K50+200', 116.407400, 39.914200,
+    NOW(), 'v1.0.0-java-pure',
+    0, 8.50,
+    1, 82.50, 0.65,
+    1, 75.50, 0.15, 68.50,
+    0, 12.50, 3.5, 15.5,
+    28.50, 5,
+    1, 'YAWNING,FATIGUE', '检测到驾驶员频繁打哈欠，眼睛闭合时间过长，疑似疲劳驾驶',
+    1, 1, 1, 48,
+    NOW()),
+('DBR202506200004', 3, '车内摄像头#3-司机位', 'CAM-IN-003', '京藏高速K50+300', 116.408400, 39.914200,
+    NOW(), 'v1.0.0-java-pure',
+    0, 12.50,
+    0, 8.50, 0.22,
+    0, 25.50, 0.24, 28.50,
+    1, 65.50, 35.5, 8.5,
+    58.50, 3,
+    1, 'DISTRACTION', '检测到驾驶员头部频繁偏离正常驾驶姿态，存在分心风险',
+    0, 1, 1, 55,
+    NOW());
+
+ALTER TABLE camera ADD COLUMN IF NOT EXISTS camera_type INT DEFAULT 1 COMMENT '摄像头类型 1-路侧 2-车内';
+ALTER TABLE camera ADD INDEX IF NOT EXISTS idx_camera_type (camera_type);
 

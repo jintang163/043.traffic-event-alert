@@ -81,6 +81,43 @@ video:
       healthAbnormal: 50
       healthCritical: 25
 
+driver:
+  behavior:
+    enabled: true
+    enableRealFrameCapture: true
+    detectionIntervalMinutes: 5
+    ffmpegPath: ffmpeg
+    frameCaptureTimeoutSeconds: 10
+    frameMaxWidth: 640
+    thresholds:
+      phoneCallConfidence: 70
+      yawningConfidence: 70
+      mouthOpenRatio: 0.45
+      fatigueConfidence: 65
+      eyeAspectRatio: 0.20
+      perclosScore: 50
+      distractionConfidence: 65
+      headPoseYawThreshold: 25
+      headPosePitchThreshold: 15
+      consecutiveAbnormalThreshold: 3
+      alertCooldownSeconds: 180
+    scoring:
+      phoneCallWeight: 30
+      yawningWeight: 25
+      fatigueWeight: 25
+      distractionWeight: 20
+    alertRules:
+      phoneCallAlert: true
+      yawningAlert: true
+      fatigueAlert: true
+      distractionAlert: true
+      phoneCallLevel: 3
+      yawningLevel: 2
+      fatigueLevel: 4
+      distractionLevel: 2
+      ledReminderEnabled: true
+      ledDisplaySeconds: 30
+
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.traffic.alert.entity

@@ -1554,3 +1554,181 @@ export const DIAGNOSIS_TYPE_LABELS: Record<string, string> = {
   MONTHLY: '月诊断',
   MANUAL: '手动诊断',
 };
+
+export const DRIVER_PHONE_CALL = 'DRIVER_PHONE_CALL';
+export const DRIVER_YAWNING = 'DRIVER_YAWNING';
+export const DRIVER_FATIGUE = 'DRIVER_FATIGUE';
+export const DRIVER_DISTRACTION = 'DRIVER_DISTRACTION';
+
+export const DRIVER_EVENT_TYPE_LABELS: Record<string, string> = {
+  [DRIVER_PHONE_CALL]: '接打电话',
+  [DRIVER_YAWNING]: '打哈欠',
+  [DRIVER_FATIGUE]: '疲劳驾驶',
+  [DRIVER_DISTRACTION]: '分心驾驶',
+};
+
+export const DRIVER_EVENT_TYPE_COLORS: Record<string, string> = {
+  [DRIVER_PHONE_CALL]: '#fa8c16',
+  [DRIVER_YAWNING]: '#faad14',
+  [DRIVER_FATIGUE]: '#ff4d4f',
+  [DRIVER_DISTRACTION]: '#722ed1',
+};
+
+export const BEHAVIOR_LEVEL_LABELS: Record<number, string> = {
+  1: '优秀',
+  2: '良好',
+  3: '一般',
+  4: '较差',
+  5: '危险',
+};
+
+export const BEHAVIOR_LEVEL_COLORS: Record<number, string> = {
+  1: '#52c41a',
+  2: '#1890ff',
+  3: '#faad14',
+  4: '#fa8c16',
+  5: '#ff4d4f',
+};
+
+export const DRIVER_ABNORMAL_TYPE_LABELS: Record<string, string> = {
+  PHONE_CALL: '接打电话',
+  YAWNING: '打哈欠',
+  FATIGUE: '疲劳驾驶',
+  DISTRACTION: '分心驾驶',
+  ABNORMAL: '行为异常',
+};
+
+export const DRIVER_ABNORMAL_TYPE_COLORS: Record<string, string> = {
+  PHONE_CALL: '#fa8c16',
+  YAWNING: '#faad14',
+  FATIGUE: '#ff4d4f',
+  DISTRACTION: '#722ed1',
+  ABNORMAL: '#eb2f96',
+};
+
+export interface DriverBehaviorRecord {
+  id: number;
+  recordNo?: string;
+  cameraId: number;
+  cameraName?: string;
+  cameraCode?: string;
+  roadName?: string;
+  longitude?: number;
+  latitude?: number;
+  detectTime: string;
+  algorithmVersion?: string;
+  isPhoneCall?: boolean;
+  phoneCallConfidence?: number;
+  phoneCallRegion?: string;
+  isYawning?: boolean;
+  yawningConfidence?: number;
+  mouthOpenRatio?: number;
+  isFatigued?: boolean;
+  fatigueConfidence?: number;
+  eyeAspectRatio?: number;
+  perclosScore?: number;
+  isDistracted?: boolean;
+  distractionConfidence?: number;
+  headPoseYaw?: number;
+  headPosePitch?: number;
+  overallScore: number;
+  behaviorLevel: number;
+  isAbnormal?: boolean;
+  abnormalTypes?: string;
+  description?: string;
+  alertTriggered?: boolean;
+  alertEventId?: number;
+  ledReminded?: boolean;
+  ledRemindResult?: string;
+  isRealFrame?: boolean;
+  frameCaptureCostMs?: number;
+  detectionDurationMs?: number;
+  createTime?: string;
+}
+
+export interface DriverBehaviorAnalysisResult {
+  cameraId: number;
+  cameraName?: string;
+  cameraCode?: string;
+  roadName?: string;
+  longitude?: number;
+  latitude?: number;
+  detectionTime: string;
+  algorithmVersion?: string;
+  isPhoneCall?: boolean;
+  phoneCallConfidence?: number;
+  phoneCallRegion?: string;
+  isYawning?: boolean;
+  yawningConfidence?: number;
+  mouthOpenRatio?: number;
+  isFatigued?: boolean;
+  fatigueConfidence?: number;
+  eyeAspectRatio?: number;
+  perclosScore?: number;
+  isDistracted?: boolean;
+  distractionConfidence?: number;
+  headPoseYaw?: number;
+  headPosePitch?: number;
+  overallScore: number;
+  behaviorLevel: number;
+  isAbnormal?: boolean;
+  abnormalTypes?: string;
+  description?: string;
+  alertTriggered?: boolean;
+  alertEventId?: number;
+  ledReminded?: boolean;
+  ledRemindResult?: string;
+  isRealFrame?: boolean;
+  frameCaptureCostMs?: number;
+  detectionDurationMs?: number;
+}
+
+export interface DriverBehaviorDashboard {
+  totalInCarCameras: number;
+  monitoredCount: number;
+  todayDetectionCount: number;
+  todayAbnormalCount: number;
+  avgBehaviorScore: number;
+  phoneCallCount?: number;
+  yawningCount?: number;
+  fatigueCount?: number;
+  distractionCount?: number;
+  abnormalTypeStats?: Record<string, number>;
+  recentAbnormalRecords?: DriverBehaviorAbnormalRecord[];
+  cameraBehaviorList?: DriverBehaviorCameraItem[];
+  reportDate?: string;
+}
+
+export interface DriverBehaviorAbnormalRecord {
+  id: number;
+  recordNo?: string;
+  cameraId: number;
+  cameraName?: string;
+  roadName?: string;
+  detectTime: string;
+  overallScore: number;
+  behaviorLevel: number;
+  abnormalType?: string;
+  abnormalTypeName?: string;
+  description?: string;
+}
+
+export interface DriverBehaviorCameraItem {
+  cameraId: number;
+  cameraName?: string;
+  cameraCode?: string;
+  roadName?: string;
+  avgBehaviorScore: number;
+  behaviorLevel: number;
+  abnormalCount?: number;
+  lastAbnormalType?: string;
+  lastAbnormalTypeName?: string;
+  lastDetectTime?: string;
+  alertCount?: number;
+}
+
+export interface DriverBehaviorManualDetectRequest {
+  cameraId: number;
+  forceMock?: boolean;
+  mockScenario?: number;
+}

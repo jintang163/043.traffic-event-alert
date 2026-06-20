@@ -19,13 +19,11 @@ import {
   NotificationOutlined,
   MessageOutlined,
   ScheduleOutlined,
-  CarOutlined,
   SendOutlined,
   SafetyOutlined,
   ThunderboltOutlined,
   AudioOutlined,
-  SafetyOutlined,
-  FileSearchOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -153,6 +151,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           key: '/video-patrol',
           icon: <FileSearchOutlined />,
           label: '设备巡检报表',
+        },
+      ],
+    },
+    {
+      key: 'sub_driver_behavior',
+      icon: <UserOutlined />,
+      label: '驾驶员行为分析',
+      children: [
+        {
+          key: '/driver-behavior',
+          icon: <SafetyOutlined />,
+          label: '行为监控看板',
         },
       ],
     },

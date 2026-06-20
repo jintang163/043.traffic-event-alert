@@ -30,6 +30,7 @@ import ConstructionZones from '@/pages/ConstructionZones';
 import AudioEvents from '@/pages/AudioEvents';
 import VideoQualityDashboard from '@/pages/VideoQualityDashboard';
 import VideoPatrolReport from '@/pages/VideoPatrolReport';
+import DriverBehaviorDashboard from '@/pages/DriverBehaviorDashboard';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -286,6 +287,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <VideoPatrolReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/driver-behavior"
+          element={
+            <ProtectedRoute>
+              <DriverBehaviorDashboard />
             </ProtectedRoute>
           }
         />

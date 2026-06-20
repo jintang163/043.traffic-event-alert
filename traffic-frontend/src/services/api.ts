@@ -748,4 +748,29 @@ export const videoQualityApi = {
     request.get<any, Result<any>>('/api/video-quality/ffmpeg/status'),
 };
 
+export const driverBehaviorApi = {
+  dashboard: () =>
+    request.get<any, Result<any>>('/api/driver-behavior/dashboard'),
+  pageRecords: (params: any) =>
+    request.get<any, Result<any>>('/api/driver-behavior/records/page', { params }),
+  getRecord: (id: number) =>
+    request.get<any, Result<any>>(`/api/driver-behavior/records/${id}`),
+  recentRecords: (cameraId?: number, limit = 10) =>
+    request.get<any, Result<any>>('/api/driver-behavior/records/recent', { params: { cameraId, limit } }),
+  manualDetect: (cameraId: number, forceMock = false, scenario = 0) =>
+    request.post<any, Result<any>>(`/api/driver-behavior/detect/${cameraId}`, null, {
+      params: { forceMock, scenario },
+    }),
+  batchMockDetect: (data: {
+    cameraIds?: number[];
+    count?: number;
+    abnormalTypes?: string[];
+  }) =>
+    request.post<any, Result<any>>('/api/driver-behavior/detect/batch-mock', data),
+  ffmpegStatus: () =>
+    request.get<any, Result<any>>('/api/driver-behavior/ffmpeg/status'),
+  getInCarCameras: () =>
+    request.get<any, Result<any>>('/api/driver-behavior/cameras'),
+};
+
 export default request;

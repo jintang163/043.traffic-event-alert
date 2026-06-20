@@ -32,4 +32,9 @@ public final class EventType {
     public static final String VIDEO_OCCLUSION = "VIDEO_OCCLUSION";
     public static final String VIDEO_FREEZE = "VIDEO_FREEZE";
     public static final String VIDEO_QUALITY_ABNORMAL = "VIDEO_QUALITY_ABNORMAL";
+
+    public static final String DRIVER_PHONE_CALL = "DRIVER_PHONE_CALL";
+    public static final String DRIVER_YAWNING = "DRIVER_YAWNING";
+    public static final String DRIVER_FATIGUE = "DRIVER_FATIGUE";
+    public static final String DRIVER_DISTRACTION = "DRIVER_DISTRACTION";
 }
