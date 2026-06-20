@@ -87,6 +87,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       label: '告警中心',
     },
     {
+      key: '/storm-suppression',
+      icon: <ThunderboltOutlined />,
+      label: '风暴抑制',
+    },
+    {
       key: '/prediction',
       icon: <ThunderboltOutlined />,
       label: '预测预警',

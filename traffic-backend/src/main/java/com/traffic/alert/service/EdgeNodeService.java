@@ -47,6 +47,7 @@ public class EdgeNodeService {
     private final CameraService cameraService;
     private final MinioService minioService;
     private final NotificationService notificationService;
+    private final AlertDeduplicationService alertDeduplicationService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -307,6 +308,35 @@ public class EdgeNodeService {
             return alertEventMapper.selectById(existEvent.getAlertEventId());
         }
 
+        com.traffic.alert.dto.AiEventCallbackRequest dedupRequest = buildDedupRequest(request);
+        AlertDeduplicationService.DeduplicationResult dedupResult = alertDeduplicationService.preProcess(dedupRequest);
+
+        if (dedupResult.isSuppressed()) {
+            log.warn("边缘事件被风暴抑制: nodeCode={}, eventUuid={}, message={}",
+                    request.getNodeCode(), request.getEventUuid(), dedupResult.getMessage());
+            saveOrUpdateOfflineEvent(request, node, null, null, null, 1, dedupResult.getMessage());
+            AlertEvent suppressedEvent = new AlertEvent();
+            suppressedEvent.setEventType(request.getEventType());
+            suppressedEvent.setCameraId(request.getCameraId());
+            suppressedEvent.setEventNo("SUP_" + System.currentTimeMillis());
+            suppressedEvent.setDescription("[风暴抑制] " + dedupResult.getMessage());
+            suppressedEvent.setAlertStatus(0);
+            return suppressedEvent;
+        }
+
+        if (dedupResult.isMerged()) {
+            log.info("边缘事件已合并: nodeCode={}, eventUuid={}, originalEventId={}, message={}",
+                    request.getNodeCode(), request.getEventUuid(),
+                    dedupResult.getOriginalEventId(), dedupResult.getMessage());
+            saveOrUpdateOfflineEvent(request, node, null, null, null, 2, dedupResult.getMessage());
+            AlertEvent mergedEvent = new AlertEvent();
+            mergedEvent.setId(dedupResult.getOriginalEventId());
+            mergedEvent.setEventType(request.getEventType());
+            mergedEvent.setCameraId(request.getCameraId());
+            mergedEvent.setDescription("[合并] " + dedupResult.getMessage());
+            return mergedEvent;
+        }
+
         Camera camera = resolveCamera(request);
 
         String eventNo = "EDG" + LocalDateTime.now().format(EVENT_NO_FORMATTER) +
@@ -365,15 +395,49 @@ public class EdgeNodeService {
         }
 
         alertEventMapper.insert(event);
+        alertDeduplicationService.registerCreatedEvent(event);
         log.info("边缘事件写入告警主链路: eventNo={}, eventType={}, nodeCode={}, camera={}",
                 eventNo, request.getEventType(), request.getNodeCode(), event.getCameraName());
 
-        saveOrUpdateOfflineEvent(request, node, event, snapshotUrl, videoUrl);
+        saveOrUpdateOfflineEvent(request, node, event, snapshotUrl, videoUrl, 2, null);
 
         AlertWebSocket.sendAlertMessage(event, false);
         notificationService.sendAlertNotification(event, false);
 
         return event;
+    }
+
+    private com.traffic.alert.dto.AiEventCallbackRequest buildDedupRequest(EdgeEventUploadRequest request) {
+        com.traffic.alert.dto.AiEventCallbackRequest req = new com.traffic.alert.dto.AiEventCallbackRequest();
+        req.setCameraId(request.getCameraId());
+        req.setCameraName(request.getCameraName());
+        req.setEventType(request.getEventType());
+        req.setEventLevel(request.getEventLevel());
+        req.setEventTime(request.getEventTime());
+        req.setConfidence(request.getConfidence());
+        req.setDescription(request.getDescription());
+        return req;
+    }
+
+    private com.traffic.alert.dto.AiEventCallbackRequest buildDedupRequest(EdgeOfflineEvent oe) {
+        com.traffic.alert.dto.AiEventCallbackRequest req = new com.traffic.alert.dto.AiEventCallbackRequest();
+        Long cameraId = null;
+        String cameraName = null;
+        if (oe.getEventData() != null && !oe.getEventData().isEmpty()) {
+            try {
+                Map<String, Object> dataMap = JSON.parseObject(oe.getEventData(), Map.class);
+                Object cid = dataMap.get("cameraId");
+                if (cid != null) cameraId = Long.valueOf(cid.toString());
+                Object cname = dataMap.get("cameraName");
+                if (cname != null) cameraName = cname.toString();
+            } catch (Exception ignored) {}
+        }
+        req.setCameraId(cameraId);
+        req.setCameraName(cameraName);
+        req.setEventType(oe.getEventType());
+        req.setEventTime(oe.getEventTime());
+        req.setDescription(oe.getEventUuid());
+        return req;
     }
 
     private Camera resolveCamera(EdgeEventUploadRequest request) {
@@ -417,31 +481,39 @@ public class EdgeNodeService {
     }
 
     private void saveOrUpdateOfflineEvent(EdgeEventUploadRequest request, EdgeNode node,
-                                            AlertEvent alertEvent, String snapshotUrl, String videoUrl) {
+                                            AlertEvent alertEvent, String snapshotUrl, String videoUrl,
+                                            Integer uploadStatus, String remark) {
         EdgeOfflineEvent existEvent = edgeOfflineEventMapper.selectOne(new LambdaQueryWrapper<EdgeOfflineEvent>()
                 .eq(EdgeOfflineEvent::getEventUuid, request.getEventUuid()));
+        int status = uploadStatus != null ? uploadStatus : 2;
         if (existEvent != null) {
-            existEvent.setAlertEventId(alertEvent.getId());
-            existEvent.setUploadStatus(2);
+            if (alertEvent != null) {
+                existEvent.setAlertEventId(alertEvent.getId());
+            }
+            existEvent.setUploadStatus(status);
             existEvent.setUploadTime(LocalDateTime.now());
             if (snapshotUrl != null) existEvent.setSnapshotUrl(snapshotUrl);
             if (videoUrl != null) existEvent.setVideoUrl(videoUrl);
+            if (remark != null && !remark.isEmpty()) existEvent.setErrorMessage(remark);
             edgeOfflineEventMapper.updateById(existEvent);
         } else {
             EdgeOfflineEvent offlineEvent = new EdgeOfflineEvent();
             offlineEvent.setEdgeNodeId(node.getId());
             offlineEvent.setNodeCode(request.getNodeCode());
             offlineEvent.setEventUuid(request.getEventUuid());
-            offlineEvent.setAlertEventId(alertEvent.getId());
+            if (alertEvent != null) {
+                offlineEvent.setAlertEventId(alertEvent.getId());
+            }
             offlineEvent.setEventType(request.getEventType());
             offlineEvent.setEventData(request.getEventData());
             offlineEvent.setEventTime(request.getEventTime() != null ? request.getEventTime() : LocalDateTime.now());
             offlineEvent.setSnapshotUrl(snapshotUrl);
             offlineEvent.setVideoUrl(videoUrl);
-            offlineEvent.setUploadStatus(2);
+            offlineEvent.setUploadStatus(status);
             offlineEvent.setRetryCount(0);
             offlineEvent.setMaxRetry(3);
             offlineEvent.setUploadTime(LocalDateTime.now());
+            if (remark != null && !remark.isEmpty()) offlineEvent.setErrorMessage(remark);
             edgeOfflineEventMapper.insert(offlineEvent);
         }
     }
@@ -505,6 +577,22 @@ public class EdgeNodeService {
     }
 
     private AlertEvent processEdgeEventFromOffline(EdgeOfflineEvent oe) {
+        com.traffic.alert.dto.AiEventCallbackRequest dedupRequest = buildDedupRequest(oe);
+        AlertDeduplicationService.DeduplicationResult dedupResult = alertDeduplicationService.preProcess(dedupRequest);
+
+        if (dedupResult.isSuppressed()) {
+            log.warn("离线补关联事件被风暴抑制: uuid={}, message={}", oe.getEventUuid(), dedupResult.getMessage());
+            oe.setErrorMessage("[风暴抑制] " + dedupResult.getMessage());
+            return null;
+        }
+        if (dedupResult.isMerged()) {
+            log.info("离线补关联事件已合并: uuid={}, originalEventId={}", oe.getEventUuid(), dedupResult.getOriginalEventId());
+            oe.setErrorMessage("[合并] " + dedupResult.getMessage());
+            AlertEvent merged = new AlertEvent();
+            merged.setId(dedupResult.getOriginalEventId());
+            return merged;
+        }
+
         String eventNo = "EDG" + LocalDateTime.now().format(EVENT_NO_FORMATTER) +
                 String.format("%04d", (int) (Math.random() * 10000));
         AlertEvent event = new AlertEvent();
@@ -547,6 +635,7 @@ public class EdgeNodeService {
         }
 
         alertEventMapper.insert(event);
+        alertDeduplicationService.registerCreatedEvent(event);
         AlertWebSocket.sendAlertMessage(event, false);
         notificationService.sendAlertNotification(event, false);
         return event;

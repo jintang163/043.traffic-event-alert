@@ -25,6 +25,7 @@ import PolicePushes from '@/pages/PolicePushes';
 import PoliceSystemConfigs from '@/pages/PoliceSystemConfigs';
 import EdgeNodes from '@/pages/EdgeNodes';
 import VirtualPatrol from '@/pages/VirtualPatrol';
+import StormSuppression from '@/pages/StormSuppression';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -241,6 +242,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <VirtualPatrol />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/storm-suppression"
+          element={
+            <ProtectedRoute>
+              <StormSuppression />
             </ProtectedRoute>
           }
         />

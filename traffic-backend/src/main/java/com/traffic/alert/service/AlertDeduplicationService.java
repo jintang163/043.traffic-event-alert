@@ -19,7 +19,6 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 @RequiredArgsConstructor
 public class AlertDeduplicationService {
 
-    private final AlertEventService alertEventService;
     private final AlertEventMapper alertEventMapper;
 
     public static final int MERGE_WINDOW_SECONDS = 5;
@@ -151,6 +150,20 @@ public class AlertDeduplicationService {
                         }
                     }
                 }
+                recordCameraAlert(cameraId);
+                if (detectStorm(cameraId)) {
+                    String cameraName = request.getCameraName();
+                    if (cameraName == null || cameraName.isEmpty()) {
+                        cameraName = "摄像头" + cameraId;
+                    }
+                    activateSuppression(cameraId, cameraName);
+                    SuppressedCameraInfo info = suppressedCameras.get(cameraId);
+                    log.error("告警合并分支检测到告警风暴! cameraId={}, cameraName={}, {}秒内{}条告警，屏蔽{}分钟",
+                            cameraId, cameraName, STORM_DETECTION_WINDOW_SECONDS, STORM_THRESHOLD_COUNT, STORM_SUPPRESSION_MINUTES);
+                    broadcastStormAlert(cameraId, cameraName, info.suppressedUntil);
+                    return DeduplicationResult.suppressed(
+                            String.format("检测到告警风暴，已自动屏蔽摄像头[%s]告警%d分钟", cameraName, STORM_SUPPRESSION_MINUTES));
+                }
                 log.info("告警合并: cameraId={}, eventType={}, 重复次数={}, 原始事件ID={}",
                         cameraId, eventType, existing.duplicateCount, existing.originalEventId);
                 return DeduplicationResult.merged(mergeKey, existing.originalEventId,
@@ -264,7 +277,7 @@ public class AlertDeduplicationService {
         }
 
         try {
-            AlertEvent event = alertEventService.getById(info.originalEventId);
+            AlertEvent event = alertEventMapper.selectById(info.originalEventId);
             if (event == null) {
                 log.warn("合并告警原始事件不存在: eventId={}", info.originalEventId);
                 return;
@@ -335,17 +348,17 @@ public class AlertDeduplicationService {
 
     private void broadcastStormAlert(Long cameraId, String cameraName, LocalDateTime until) {
         try {
-            AlertWebSocket.sendAlertMessage(Map.of(
-                    "type", "STORM_ALERT",
-                    "cameraId", cameraId,
-                    "cameraName", cameraName,
-                    "alertType", "STORM_DETECTED",
-                    "message", String.format("检测到告警风暴，摄像头[%s]已自动屏蔽%d分钟", cameraName, STORM_SUPPRESSION_MINUTES),
-                    "suppressedUntil", until.toString(),
-                    "threshold", STORM_THRESHOLD_COUNT,
-                    "windowSeconds", STORM_DETECTION_WINDOW_SECONDS,
-                    "timestamp", LocalDateTime.now().toString()
-            ), true);
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("cameraId", cameraId);
+            data.put("cameraName", cameraName);
+            data.put("alertType", "STORM_DETECTED");
+            data.put("message", String.format("检测到告警风暴，摄像头[%s]已自动屏蔽%d分钟", cameraName, STORM_SUPPRESSION_MINUTES));
+            data.put("suppressedUntil", until.toString());
+            data.put("threshold", STORM_THRESHOLD_COUNT);
+            data.put("windowSeconds", STORM_DETECTION_WINDOW_SECONDS);
+            data.put("suppressionMinutes", STORM_SUPPRESSION_MINUTES);
+            data.put("timestamp", LocalDateTime.now().toString());
+            AlertWebSocket.sendStormAlert(data);
         } catch (Exception e) {
             log.warn("广播告警风暴通知失败: {}", e.getMessage());
         }
@@ -353,15 +366,14 @@ public class AlertDeduplicationService {
 
     private void broadcastStormRecovery(Long cameraId, String cameraName, int suppressedCount) {
         try {
-            AlertWebSocket.sendAlertMessage(Map.of(
-                    "type", "STORM_RECOVERY",
-                    "cameraId", cameraId,
-                    "cameraName", cameraName,
-                    "alertType", "STORM_RECOVERED",
-                    "message", String.format("摄像头[%s]告警风暴抑制已解除，共屏蔽%d条告警", cameraName, suppressedCount),
-                    "suppressedCount", suppressedCount,
-                    "timestamp", LocalDateTime.now().toString()
-            ), false);
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("cameraId", cameraId);
+            data.put("cameraName", cameraName);
+            data.put("alertType", "STORM_RECOVERED");
+            data.put("message", String.format("摄像头[%s]告警风暴抑制已解除，共屏蔽%d条告警", cameraName, suppressedCount));
+            data.put("suppressedCount", suppressedCount);
+            data.put("timestamp", LocalDateTime.now().toString());
+            AlertWebSocket.sendStormRecovery(data);
         } catch (Exception e) {
             log.warn("广播告警风暴恢复通知失败: {}", e.getMessage());
         }

@@ -37,9 +37,9 @@ import {
   CarOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { alertApi, workOrderApi, departmentApi, globalTrackApi, plateRecognitionApi, policePushApi } from '@/services/api';
+import { alertApi, workOrderApi, departmentApi, globalTrackApi, plateRecognitionApi, policePushApi, alertDedupApi } from '@/services/api';
 import { wsService } from '@/services/websocket';
-import { useAlertStore } from '@/store/alertStore';
+import { useAlertStore, type StormSuppressedCamera } from '@/store/alertStore';
 import EventReplayModal from '@/components/EventReplayModal';
 import LedSignDisplay from '@/components/LedSignDisplay';
 import {
@@ -69,7 +69,7 @@ const { TextArea } = Input;
 
 const Alerts: React.FC = () => {
   const navigate = useNavigate();
-  const { addAlert, markAllRead, updateAlert } = useAlertStore();
+  const { addAlert, markAllRead, updateAlert, addStormSuppressed, removeStormSuppressed, setStormSuppressedList, stormSuppressedCameras } = useAlertStore();
   const [data, setData] = useState<AlertEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState(1);
@@ -95,6 +95,9 @@ const Alerts: React.FC = () => {
   const [pedestrianAlertModal, setPedestrianAlertModal] = useState(false);
   const [pedestrianAlertInfo, setPedestrianAlertInfo] = useState<AlertEvent | null>(null);
   const [replayModal, setReplayModal] = useState(false);
+  const [stormAlertModal, setStormAlertModal] = useState(false);
+  const [stormAlertInfo, setStormAlertInfo] = useState<any>(null);
+  const [stormSuppressedList, setStormSuppressedListState] = useState<StormSuppressedCamera[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -119,9 +122,22 @@ const Alerts: React.FC = () => {
     }
   };
 
+  const loadStormStatus = async () => {
+    try {
+      const res: any = await alertDedupApi.getStatus();
+      if (res.code === 200 && res.data?.suppressedCameras) {
+        setStormSuppressedList(res.data.suppressedCameras);
+        setStormSuppressedList(res.data.suppressedCameras);
+      }
+    } catch (e) {
+      console.warn('加载风暴抑制状态失败:', e);
+    }
+  };
+
   useEffect(() => {
     loadData();
     markAllRead();
+    loadStormStatus();
 
     const unsub = wsService.onAlert((alert) => {
       addAlert(alert as any);
@@ -151,7 +167,34 @@ const Alerts: React.FC = () => {
       } catch (_) {}
     });
 
-    return () => { unsub(); unsubMajor(); };
+    const unsubStormAlert = wsService.onStormAlert((data) => {
+      console.warn('[STORM] 告警风暴触发:', data);
+      addStormSuppressed(data);
+      setStormAlertInfo(data);
+      setStormAlertModal(true);
+      loadStormStatus();
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 440;
+        osc.type = 'sawtooth';
+        gain.gain.value = 0.25;
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 1000);
+      } catch (_) {}
+    });
+
+    const unsubStormRecovery = wsService.onStormRecovery((data) => {
+      console.info('[STORM] 告警风暴恢复:', data);
+      removeStormSuppressed(Number(data.cameraId));
+      loadStormStatus();
+      message.success(data.message || '告警风暴抑制已解除');
+    });
+
+    return () => { unsub(); unsubMajor(); unsubStormAlert(); unsubStormRecovery(); };
   }, [current, pageSize]);
 
   useEffect(() => {

@@ -149,4 +149,20 @@ public class AlertWebSocket {
         payload.put("timestamp", System.currentTimeMillis());
         broadcastMessage(JSON.toJSONString(payload));
     }
+
+    public static void sendStormAlert(Map<String, Object> stormData) {
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("type", "STORM_ALERT");
+        payload.put("data", stormData);
+        payload.put("timestamp", System.currentTimeMillis());
+        broadcastMessage(JSON.toJSONString(payload));
+    }
+
+    public static void sendStormRecovery(Map<String, Object> recoveryData) {
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("type", "STORM_RECOVERY");
+        payload.put("data", recoveryData);
+        payload.put("timestamp", System.currentTimeMillis());
+        broadcastMessage(JSON.toJSONString(payload));
+    }
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Row, Col, Card, Statistic, List, Tag, Button, Modal, notification } from 'antd';
+import { Row, Col, Card, Statistic, List, Tag, Button, Modal, notification, Alert } from 'antd';
 import {
   CarOutlined,
   WarningOutlined,
@@ -9,11 +9,12 @@ import {
   ReloadOutlined,
   PlayCircleOutlined,
   SafetyOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { statisticsApi, alertApi, cameraApi } from '@/services/api';
+import { statisticsApi, alertApi, cameraApi, alertDedupApi } from '@/services/api';
 import { wsService } from '@/services/websocket';
-import { useAlertStore } from '@/store/alertStore';
+import { useAlertStore, type StormSuppressedCamera } from '@/store/alertStore';
 import VideoPlayer from '@/components/VideoPlayer';
 import PtzPanel from '@/components/PtzPanel';
 import PtzCruisePanel from '@/components/PtzCruisePanel';
@@ -29,13 +30,14 @@ import {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { addAlert } = useAlertStore();
+  const { addAlert, addStormSuppressed, removeStormSuppressed, setStormSuppressedList, stormSuppressedCameras } = useAlertStore();
   const [stats, setStats] = useState<StatisticsOverview | null>(null);
   const [recentAlerts, setRecentAlerts] = useState<AlertEvent[]>([]);
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [videoModal, setVideoModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [suppressedList, setSuppressedList] = useState<StormSuppressedCamera[]>([]);
   const [api, contextHolder] = notification.useNotification();
 
   const loadData = async () => {
@@ -56,6 +58,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    loadStormStatus();
 
     const unsub = wsService.onAlert((alert) => {
       api.open({
@@ -68,8 +71,59 @@ const Dashboard: React.FC = () => {
       setRecentAlerts((prev) => [alert as any, ...prev].slice(0, 10));
     });
 
-    return () => unsub();
+    const unsubStormAlert = wsService.onStormAlert((data) => {
+      console.warn('[STORM] 大屏告警风暴触发:', data);
+      addStormSuppressed(data);
+      loadStormStatus();
+      api.open({
+        message: `⚡ 告警风暴检测: ${data.cameraName || '摄像头' + data.cameraId}`,
+        description: data.message || '已自动屏蔽该摄像头告警',
+        duration: 0,
+        type: 'error',
+        placement: 'topLeft',
+      });
+    });
+
+    const unsubStormRecovery = wsService.onStormRecovery((data) => {
+      console.info('[STORM] 大屏告警风暴恢复:', data);
+      removeStormSuppressed(Number(data.cameraId));
+      loadStormStatus();
+      api.open({
+        message: `✅ 风暴恢复: ${data.cameraName || '摄像头' + data.cameraId}`,
+        description: data.message || '告警风暴抑制已解除',
+        duration: 8,
+        type: 'success',
+        placement: 'topLeft',
+      });
+    });
+
+    return () => { unsub(); unsubStormAlert(); unsubStormRecovery(); };
   }, []);
+
+  const loadStormStatus = async () => {
+    try {
+      const res: any = await alertDedupApi.getStatus();
+      if (res.code === 200 && res.data?.suppressedCameras) {
+        setSuppressedList(res.data.suppressedCameras);
+        setStormSuppressedList(res.data.suppressedCameras);
+      }
+    } catch (e) {
+      console.warn('加载风暴抑制状态失败:', e);
+    }
+  };
+
+  const handleReleaseSuppression = async (cameraId: number) => {
+    try {
+      const res: any = await alertDedupApi.releaseSuppression(cameraId);
+      if (res.code === 200) {
+        removeStormSuppressed(cameraId);
+        loadStormStatus();
+        notification.success({ message: '已手动解除风暴抑制' });
+      }
+    } catch (e) {
+      notification.error({ message: '解除失败' });
+    }
+  };
 
   const getColorByLevel = (level: number) => {
     const colors: Record<number, string> = {
@@ -87,10 +141,35 @@ const Dashboard: React.FC = () => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: 20 }}>监控大屏</h2>
-        <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={() => { loadData(); loadStormStatus(); }} loading={loading}>
           刷新
         </Button>
       </div>
+
+      {suppressedList.length > 0 && (
+        <Alert
+          type="error"
+          showIcon
+          icon={<ThunderboltOutlined />}
+          style={{ marginBottom: 16, borderRadius: 8 }}
+          message={`告警风暴抑制中（${suppressedList.length}个摄像头）`}
+          description={
+            <div>
+              {suppressedList.map((s) => (
+                <div key={s.cameraId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                  <span>
+                    <strong>{s.cameraName}</strong>（ID: {s.cameraId}）- 有效期至 {new Date(s.suppressedUntil).toLocaleString()}，已屏蔽 {s.suppressedCount} 条
+                  </span>
+                  <Button size="small" type="primary" danger onClick={() => handleReleaseSuppression(s.cameraId)}>
+                    手动解除
+                  </Button>
+                </div>
+              ))}
+            </div>
+          }
+          closable
+        />
+      )}
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={12} md={6}>

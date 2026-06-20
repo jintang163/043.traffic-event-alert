@@ -54,6 +54,8 @@ type AlertHandler = (alert: WsAlertEvent) => void;
 type DetectionHandler = (cameraId: number, data: DetectionMessage) => void;
 type LedStatusHandler = (data: any) => void;
 type TrackUpdateHandler = (data: any) => void;
+type StormAlertHandler = (data: any) => void;
+type StormRecoveryHandler = (data: any) => void;
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080';
 
@@ -67,6 +69,8 @@ class WebSocketService {
   private detectionHandlers: Map<number, Set<DetectionHandler>> = new Map();
   private ledStatusHandlers: Map<number, Set<LedStatusHandler>> = new Map();
   private trackUpdateHandlers: Set<TrackUpdateHandler> = new Set();
+  private stormAlertHandlers: Set<StormAlertHandler> = new Set();
+  private stormRecoveryHandlers: Set<StormRecoveryHandler> = new Set();
   private subscribedCameras: Set<number> = new Set();
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
@@ -239,6 +243,26 @@ class WebSocketService {
           }
         });
       }
+
+      if (message.type === 'STORM_ALERT' && message.data) {
+        this.stormAlertHandlers.forEach((handler) => {
+          try {
+            handler(message.data);
+          } catch (e) {
+            console.error('[WS] Storm alert handler error:', e);
+          }
+        });
+      }
+
+      if (message.type === 'STORM_RECOVERY' && message.data) {
+        this.stormRecoveryHandlers.forEach((handler) => {
+          try {
+            handler(message.data);
+          } catch (e) {
+            console.error('[WS] Storm recovery handler error:', e);
+          }
+        });
+      }
     } catch (e) {
       console.error('[WS] Parse message error:', e, body);
     }
@@ -350,6 +374,16 @@ class WebSocketService {
   onTrackUpdate(handler: TrackUpdateHandler) {
     this.trackUpdateHandlers.add(handler);
     return () => this.trackUpdateHandlers.delete(handler);
+  }
+
+  onStormAlert(handler: StormAlertHandler) {
+    this.stormAlertHandlers.add(handler);
+    return () => this.stormAlertHandlers.delete(handler);
+  }
+
+  onStormRecovery(handler: StormRecoveryHandler) {
+    this.stormRecoveryHandlers.add(handler);
+    return () => this.stormRecoveryHandlers.delete(handler);
   }
 
   isConnected() {
