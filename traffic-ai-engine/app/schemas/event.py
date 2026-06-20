@@ -12,15 +12,18 @@ class EventType(str, Enum):
     REVERSE = "REVERSE"
     DEBRIS = "DEBRIS"
     INTRUSION = "INTRUSION"
-    SPEEDING = "speeding"
-    RED_LIGHT = "red_light"
-    WRONG_WAY = "wrong_way"
-    ILLEGAL_PARKING = "illegal_parking"
-    PEDESTRIAN_CROSSING = "pedestrian_crossing"
+    SPEEDING = "SPEEDING"
+    RED_LIGHT = "RED_LIGHT"
+    WRONG_WAY = "WRONG_WAY"
+    ILLEGAL_PARKING = "ILLEGAL_PARKING"
+    PEDESTRIAN_CROSSING = "PEDESTRIAN_CROSSING"
     PEDESTRIAN_INTRUSION = "PEDESTRIAN_INTRUSION"
-    TRAFFIC_CONGESTION = "traffic_congestion"
+    TRAFFIC_CONGESTION = "TRAFFIC_CONGESTION"
+    STOPPED_VEHICLE = "STOPPED_VEHICLE"
+    CONGESTION = "CONGESTION"
     CONE_MISSING = "CONE_MISSING"
     CONSTRUCTION_SPEEDING = "CONSTRUCTION_SPEEDING"
+    CONSTRUCTION_INTRUSION = "CONSTRUCTION_INTRUSION"
 
 
 class EventSeverity(int, Enum):
@@ -105,3 +108,27 @@ class AiEventCallbackRequest(BaseModel):
     trackData: Optional[List[Dict[str, Any]]] = None
     bbox: Optional[Dict[str, Any]] = None
     licensePlates: Optional[List[Dict[str, Any]]] = None
+    metadata: Optional[Dict[str, Any]] = Field(None, description="事件元数据，用于关联施工计划等")
+
+
+class ConeDetectionCallbackRequest(BaseModel):
+    planId: Optional[int] = None
+    planCode: Optional[str] = None
+    planName: Optional[str] = None
+    cameraId: Optional[int] = None
+    detectionTime: datetime
+    detectedConeCount: int
+    standardConeCount: int
+    missingConeCount: int
+    isCompliant: int
+    complianceRate: float
+    avgConfidence: float
+    alertTriggered: int
+    alertLevel: Optional[int] = None
+    conePositions: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ConstructionPlanConfigRequest(BaseModel):
+    cameraId: int
+    planConfig: Dict[str, Any]

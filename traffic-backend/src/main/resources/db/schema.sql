@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS alert_event (
     handle_user_id BIGINT,
     handle_time DATETIME,
     handle_remark VARCHAR(1024),
+    construction_plan_id BIGINT COMMENT '关联施工计划ID',
     create_time DATETIME,
     update_time DATETIME,
     deleted INT DEFAULT 0,
@@ -100,7 +101,8 @@ CREATE TABLE IF NOT EXISTS alert_event (
     INDEX idx_event_level (event_level),
     INDEX idx_camera_id (camera_id),
     INDEX idx_event_time (event_time),
-    INDEX idx_alert_status (alert_status)
+    INDEX idx_alert_status (alert_status),
+    INDEX idx_construction_plan_id (construction_plan_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS work_order (

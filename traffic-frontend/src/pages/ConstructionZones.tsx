@@ -14,6 +14,7 @@ import {
 import { constructionApi, cameraApi, geoFenceApi } from '@/services/api';
 import { type Camera } from '@/types';
 import ConstructionLayer from '@/components/ConstructionLayer';
+import ConstructionMapLayer from '@/components/ConstructionMapLayer';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -38,6 +39,9 @@ interface ConstructionPlan {
   planStatusLabel: string;
   speedLimit: number;
   standardConeCount: number;
+  bufferDistance: number;
+  polygonPoints?: string;
+  polygonPointsPixel?: string;
   alertEnabled: number;
   alertLevel: number;
   eventCount: number;
@@ -733,7 +737,13 @@ const ConstructionZones: React.FC = () => {
         width={1100}
         destroyOnClose
       >
-        {layerPlan && <ConstructionLayer plan={layerPlan} />}
+        {layerPlan && (
+          <ConstructionMapLayer
+            plan={layerPlan}
+            camera={cameras.find(c => c.id === layerPlan.cameraId)}
+            height={480}
+          />
+        )}
       </Modal>
     </div>
   );

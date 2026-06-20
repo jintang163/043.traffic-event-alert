@@ -32,4 +32,6 @@ public class AiEventCallbackRequest {
     private Integer accidentCasualty;
     private BigDecimal accidentImpactSpeed;
     private String accidentSeverity;
+
+    private Map<String, Object> metadata;
 }

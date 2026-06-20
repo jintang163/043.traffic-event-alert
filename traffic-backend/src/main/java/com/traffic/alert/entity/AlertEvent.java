@@ -1,11 +1,13 @@
 package com.traffic.alert.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -73,4 +75,9 @@ public class AlertEvent extends BaseEntity {
     private String accidentEvaluationReasons;
 
     private String sourceNodeCode;
+
+    private Long constructionPlanId;
+
+    @TableField(exist = false)
+    private Map<String, Object> eventMetadata;
 }

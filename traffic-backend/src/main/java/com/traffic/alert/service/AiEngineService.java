@@ -303,4 +303,49 @@ public class AiEngineService {
             return false;
         }
     }
+
+    public boolean syncConstructionPlan(Long cameraId, Map<String, Object> planConfig) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/events/construction-plan/sync";
+            Map<String, Object> body = Map.of(
+                    "cameraId", cameraId,
+                    "planConfig", planConfig != null ? planConfig : Map.of()
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body)))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("同步施工计划配置到AI引擎: cameraId={}, planName={}, response={}",
+                    cameraId, planConfig != null ? planConfig.get("plan_name") : "null", response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("同步施工计划配置到AI引擎失败: cameraId={}, error={}", cameraId, e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean removeConstructionPlan(Long cameraId) {
+        try {
+            String url = aiEngineConfig.getBaseUrl() + "/api/v1/events/construction-plan/" + cameraId;
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofMillis(aiEngineConfig.getReadTimeout()))
+                    .DELETE()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("移除AI引擎施工计划配置: cameraId={}, response={}", cameraId, response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            log.error("移除AI引擎施工计划配置失败: cameraId={}, error={}", cameraId, e.getMessage());
+            return false;
+        }
+    }
 }

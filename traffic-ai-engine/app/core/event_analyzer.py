@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+import json
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -10,6 +11,7 @@ from app.config.settings import settings
 from app.core.feature_extractor import plate_recognizer
 from app.core.tracker import get_tracker, Track
 from app.core.fence_manager import fence_manager
+from app.core.cone_detector import cone_detector
 from app.schemas.event import (
     TrafficEvent, EventType, EventSeverity, EventLocation
 )
@@ -24,6 +26,10 @@ class EventAnalyzer:
         self.cooldown_seconds = 60
         self.pedestrian_intrusion_tracks: Dict[str, Dict[str, float]] = {}
         self.pedestrian_road_regions: Dict[str, List[Tuple[float, float]]] = {}
+        self.construction_plans: Dict[str, Dict] = {}
+        self.cone_detection_intervals: Dict[str, float] = {}
+        self.last_cone_detection: Dict[str, float] = {}
+        self.cone_cooldown = 300.0
 
     def analyze(
         self,
@@ -55,7 +61,17 @@ class EventAnalyzer:
             )
             events.extend(pedestrian_intrusion_events)
 
-        return events
+        cone_events, cone_detection_result = self._detect_cone_issues(
+            camera_id, tracked_objects, frame_width, frame_height
+        )
+        events.extend(cone_events)
+
+        construction_speeding_events = self._detect_construction_speeding(
+            camera_id, tracked_objects, frame_width, frame_height
+        )
+        events.extend(construction_speeding_events)
+
+        return events, cone_detection_result
 
     def _is_in_cooldown(self, event_key: str) -> bool:
         now = time.time()
@@ -455,7 +471,8 @@ class EventAnalyzer:
         severity: EventSeverity,
         involved_objects: List[TrackedObject],
         confidence: float,
-        description: str
+        description: str,
+        metadata: Optional[Dict] = None
     ) -> TrafficEvent:
         return TrafficEvent(
             event_id=str(uuid.uuid4()),
@@ -465,8 +482,232 @@ class EventAnalyzer:
             location=EventLocation(camera_id=str(camera_id)),
             description=description,
             involved_objects=involved_objects,
-            confidence=round(confidence, 4)
+            confidence=round(confidence, 4),
+            metadata=metadata
         )
+
+    def set_construction_plan(self, camera_id: str, plan_config: Dict):
+        self.construction_plans[camera_id] = plan_config
+        self.last_cone_detection.pop(camera_id, None)
+        logger.info(f"设置摄像头[{camera_id}]施工计划配置: {plan_config}")
+
+    def remove_construction_plan(self, camera_id: str):
+        self.construction_plans.pop(camera_id, None)
+        self.last_cone_detection.pop(camera_id, None)
+        logger.info(f"移除摄像头[{camera_id}]施工计划配置")
+
+    def get_construction_plan(self, camera_id: str) -> Optional[Dict]:
+        return self.construction_plans.get(camera_id)
+
+    def _detect_cone_issues(
+        self,
+        camera_id: str,
+        tracked_objects: List[TrackedObject],
+        frame_width: int = 1920,
+        frame_height: int = 1080,
+    ) -> Tuple[List[TrafficEvent], Optional[Dict]]:
+        events: List[TrafficEvent] = []
+        plan = self.construction_plans.get(camera_id)
+
+        if not plan or plan.get("plan_status") != 2 or plan.get("alert_enabled") != 1:
+            return events, None
+
+        now = time.time()
+        interval = self.cone_detection_intervals.get(camera_id, 60.0)
+        last_detection = self.last_cone_detection.get(camera_id, 0)
+
+        if now - last_detection < interval:
+            return events, None
+
+        self.last_cone_detection[camera_id] = now
+
+        standard_count = plan.get("standard_cone_count", 0)
+        construction_zone = plan.get("polygon_points_pixel")
+        if isinstance(construction_zone, str):
+            try:
+                import json
+                construction_zone = json.loads(construction_zone)
+            except:
+                construction_zone = None
+
+        if construction_zone and len(construction_zone) >= 3:
+            construction_zone = [(float(p[0]), float(p[1])) for p in construction_zone]
+
+        compliance_result = cone_detector.check_cone_compliance(
+            camera_id=camera_id,
+            tracked_objects=tracked_objects,
+            standard_count=standard_count,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            construction_zone=construction_zone,
+            tolerance_ratio=0.9,
+        )
+
+        detection_result = {
+            "plan_id": plan.get("id"),
+            "plan_code": plan.get("plan_code"),
+            "plan_name": plan.get("plan_name"),
+            "camera_id": int(camera_id) if camera_id.isdigit() else None,
+            "detection_time": datetime.now().isoformat(),
+            "detected_cone_count": compliance_result["detected_count"],
+            "standard_cone_count": standard_count,
+            "missing_cone_count": compliance_result["missing_count"],
+            "is_compliant": 1 if compliance_result["is_compliant"] else 0,
+            "compliance_rate": round(compliance_result["compliance_rate"], 2),
+            "avg_confidence": round(compliance_result["avg_confidence"], 4),
+            "alert_triggered": 0,
+            "alert_level": plan.get("alert_level", 2),
+            "cone_positions": json.dumps([
+                {"x": c["pixel_x"], "y": c["pixel_y"], "confidence": c["confidence"]}
+                for c in compliance_result["cones"]
+            ]) if compliance_result["cones"] else None,
+            "description": compliance_result.get("description", ""),
+        }
+
+        event_key = f"cone_missing_{camera_id}"
+        if not compliance_result["is_compliant"] and not self._is_in_cooldown(event_key):
+            self.cooldown_events[event_key] = now
+            detection_result["alert_triggered"] = 1
+
+            severity = EventSeverity.HIGH
+            if compliance_result["compliance_rate"] >= 70:
+                severity = EventSeverity.MEDIUM
+            elif compliance_result["compliance_rate"] < 30:
+                severity = EventSeverity.CRITICAL
+
+            event = self._create_event(
+                camera_id=camera_id,
+                event_type=EventType.CONE_MISSING,
+                severity=severity,
+                involved_objects=[],
+                confidence=compliance_result["avg_confidence"] if compliance_result["cones"] else 0.9,
+                description=f"施工区锥桶摆放不合规，检测到{compliance_result['detected_count']}个，标准{standard_count}个，"
+                           f"缺失{compliance_result['missing_count']}个，合规率{compliance_result['compliance_rate']:.1f}%",
+                metadata={
+                    "plan_id": plan.get("id"),
+                    "plan_code": plan.get("plan_code"),
+                    "detected_count": compliance_result["detected_count"],
+                    "standard_count": standard_count,
+                    "missing_count": compliance_result["missing_count"],
+                    "compliance_rate": compliance_result["compliance_rate"],
+                    "cone_positions": detection_result["cone_positions"],
+                }
+            )
+            events.append(event)
+            logger.warning(
+                f"锥桶缺失告警: camera={camera_id}, plan={plan.get('plan_name')}, "
+                f"detected={compliance_result['detected_count']}, standard={standard_count}, "
+                f"missing={compliance_result['missing_count']}, rate={compliance_result['compliance_rate']:.1f}%"
+            )
+
+        return events, detection_result
+
+    def _detect_construction_speeding(
+        self,
+        camera_id: str,
+        tracked_objects: List[TrackedObject],
+        frame_width: int = 1920,
+        frame_height: int = 1080,
+    ) -> List[TrafficEvent]:
+        events: List[TrafficEvent] = []
+        plan = self.construction_plans.get(camera_id)
+
+        if not plan or plan.get("plan_status") != 2 or plan.get("alert_enabled") != 1:
+            return events
+
+        speed_limit = plan.get("speed_limit", 60.0)
+        construction_zone = plan.get("polygon_points_pixel")
+        buffer_zone = plan.get("buffer_polygon_points_pixel")
+
+        if isinstance(construction_zone, str):
+            try:
+                import json
+                construction_zone = json.loads(construction_zone)
+            except:
+                construction_zone = None
+
+        if isinstance(buffer_zone, str):
+            try:
+                import json
+                buffer_zone = json.loads(buffer_zone)
+            except:
+                buffer_zone = None
+
+        if construction_zone and len(construction_zone) >= 3:
+            construction_zone = [(float(p[0]), float(p[1])) for p in construction_zone]
+
+        if buffer_zone and len(buffer_zone) >= 3:
+            buffer_zone = [(float(p[0]), float(p[1])) for p in buffer_zone]
+
+        vehicle_class_ids = {2, 3, 5, 7}
+
+        for obj in tracked_objects:
+            if obj.class_id not in vehicle_class_ids:
+                continue
+
+            if not hasattr(obj, 'velocity') or obj.velocity is None:
+                continue
+
+            speed = getattr(obj.velocity, 'speed_kmh', None)
+            if speed is None:
+                continue
+
+            nx = (obj.bbox.x1 + obj.bbox.x2) / 2 / frame_width
+            ny = (obj.bbox.y1 + obj.bbox.y2) / 2 / frame_height
+
+            in_construction = False
+            in_buffer = False
+
+            if construction_zone:
+                in_construction = self._is_point_in_polygon(nx, ny, construction_zone)
+
+            if not in_construction and buffer_zone:
+                in_buffer = self._is_point_in_polygon(nx, ny, buffer_zone)
+
+            if (in_construction or in_buffer) and speed > speed_limit:
+                event_key = f"construction_speeding_{camera_id}_{obj.track_id}"
+                if not self._is_in_cooldown(event_key):
+                    severity = EventSeverity.MEDIUM
+                    if speed > speed_limit * 1.5:
+                        severity = EventSeverity.HIGH
+
+                    zone_type = "施工区" if in_construction else "缓冲区"
+                    event = self._create_event(
+                        camera_id=camera_id,
+                        event_type=EventType.CONSTRUCTION_SPEEDING,
+                        severity=severity,
+                        involved_objects=[obj],
+                        confidence=obj.confidence,
+                        description=f"{zone_type}车辆超速，限速{speed_limit}km/h，实测{speed:.1f}km/h，"
+                                   f"超速{(speed/speed_limit - 1)*100:.1f}%",
+                        metadata={
+                            "plan_id": plan.get("id"),
+                            "plan_code": plan.get("plan_code"),
+                            "speed_limit": speed_limit,
+                            "detected_speed": speed,
+                            "zone_type": zone_type,
+                            "track_id": obj.track_id,
+                        }
+                    )
+                    events.append(event)
+                    logger.warning(
+                        f"施工区超速告警: camera={camera_id}, zone={zone_type}, "
+                        f"speed={speed:.1f}, limit={speed_limit}, track={obj.track_id}"
+                    )
+
+        return events
+
+    def _is_point_in_polygon(self, x: float, y: float, polygon: List[Tuple[float, float]]) -> bool:
+        n = len(polygon)
+        inside = False
+        j = n - 1
+        for i in range(n):
+            xi, yi = polygon[i]
+            xj, yj = polygon[j]
+            if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+                inside = not inside
+            j = i
+        return inside
 
 
 event_analyzer = EventAnalyzer()

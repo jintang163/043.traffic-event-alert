@@ -53,6 +53,7 @@ public class AlertEventService {
     private final CameraNeighborService cameraNeighborService;
     private final AiEngineService aiEngineService;
     private final AlertDeduplicationService alertDeduplicationService;
+    private final ConstructionZoneMonitorService constructionZoneMonitorService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -140,7 +141,18 @@ public class AlertEventService {
 
         AlertEvent event = new AlertEvent();
         event.setEventNo(eventNo);
-        event.setEventType(request.getEventType());
+        event.setEventType(normalizeEventType(request.getEventType()));
+
+        if (request.getMetadata() != null && !request.getMetadata().isEmpty()) {
+            event.setEventMetadata(request.getMetadata());
+            if (request.getMetadata().get("plan_id") != null) {
+                try {
+                    event.setConstructionPlanId(Long.valueOf(request.getMetadata().get("plan_id").toString()));
+                } catch (Exception e) {
+                    log.warn("解析施工计划ID失败: {}", request.getMetadata().get("plan_id"));
+                }
+            }
+        }
 
         if ("DEBRIS".equals(request.getEventType())) {
             DebrisCategory category = debrisClassificationService.validateAndResolve(request.getDebrisCategory());
@@ -203,6 +215,12 @@ public class AlertEventService {
         alertDeduplicationService.registerCreatedEvent(event);
         log.info("创建交通告警事件: eventNo={}, type={}, camera={}, level={}",
                 eventNo, request.getEventType(), camera.getCameraName(), event.getEventLevel());
+
+        try {
+            constructionZoneMonitorService.processEventForConstructionPlans(event);
+        } catch (Exception e) {
+            log.warn("关联施工计划失败: eventNo={}, error={}", eventNo, e.getMessage());
+        }
 
         boolean isMajorAccident = accidentSeverityService.isMajorAccident(event);
 
@@ -930,5 +948,23 @@ public class AlertEventService {
         } catch (Exception e) {
             log.warn("补齐行人轨迹数据失败: eventNo={}, error={}", event.getEventNo(), e.getMessage());
         }
+    }
+
+    private String normalizeEventType(String eventType) {
+        if (eventType == null) {
+            return "UNKNOWN";
+        }
+        return switch (eventType.toUpperCase()) {
+            case "ACCIDENT", "TRAFFIC_ACCIDENT" -> "ACCIDENT";
+            case "REVERSE", "WRONG_WAY", "WRONG_DIRECTION" -> "REVERSE";
+            case "DEBRIS", "SPILL", "THROW_OBJECT" -> "DEBRIS";
+            case "INTRUSION", "VEHICLE_INTRUSION", "CONSTRUCTION_INTRUSION" -> "CONSTRUCTION_INTRUSION";
+            case "PEDESTRIAN", "PEDESTRIAN_INTRUSION" -> "PEDESTRIAN_INTRUSION";
+            case "SPEEDING", "OVER_SPEED", "CONSTRUCTION_SPEEDING" -> "CONSTRUCTION_SPEEDING";
+            case "CONE_MISSING", "CONE_ABNORMAL", "CONSTRUCTION_CONE_MISSING" -> "CONE_MISSING";
+            case "STOPPED_VEHICLE", "STOP", "PARKING" -> "STOPPED_VEHICLE";
+            case "CONGESTION", "TRAFFIC_JAM" -> "CONGESTION";
+            default -> eventType.toUpperCase();
+        };
     }
 }

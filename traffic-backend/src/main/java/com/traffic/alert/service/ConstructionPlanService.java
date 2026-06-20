@@ -179,9 +179,17 @@ public class ConstructionPlanService {
             if (plan.getLedReminderEnabled() != null && plan.getLedReminderEnabled() == 1) {
                 triggerLedReminder(plan);
             }
+            syncPlanToAiEngine(plan);
         } else if (status == 3 && plan.getActualEndTime() == null) {
             plan.setActualEndTime(LocalDateTime.now());
             disableConstructionFences(plan);
+            if (plan.getCameraId() != null) {
+                aiEngineService.removeConstructionPlan(plan.getCameraId());
+            }
+        }
+
+        if (status == 4 && plan.getCameraId() != null) {
+            aiEngineService.removeConstructionPlan(plan.getCameraId());
         }
 
         constructionPlanMapper.updateById(plan);
@@ -252,6 +260,43 @@ public class ConstructionPlanService {
             } catch (Exception e) {
                 log.warn("触发LED提醒失败: cameraId={}, error={}", plan.getCameraId(), e.getMessage());
             }
+        }
+    }
+
+    public void syncPlanToAiEngine(ConstructionPlan plan) {
+        if (plan.getCameraId() == null) {
+            return;
+        }
+        try {
+            Map<String, Object> planConfig = new java.util.HashMap<>();
+            planConfig.put("id", plan.getId());
+            planConfig.put("plan_code", plan.getPlanCode());
+            planConfig.put("plan_name", plan.getPlanName());
+            planConfig.put("construction_type", plan.getConstructionType());
+            planConfig.put("plan_status", plan.getPlanStatus());
+            planConfig.put("camera_id", plan.getCameraId());
+            planConfig.put("fence_id", plan.getFenceId());
+            planConfig.put("buffer_fence_id", plan.getBufferFenceId());
+            planConfig.put("speed_limit", plan.getSpeedLimit() != null ? plan.getSpeedLimit().doubleValue() : 60.0);
+            planConfig.put("standard_cone_count", plan.getStandardConeCount() != null ? plan.getStandardConeCount() : 0);
+            planConfig.put("buffer_distance", plan.getBufferDistance() != null ? plan.getBufferDistance().doubleValue() : 50.0);
+            planConfig.put("alert_enabled", plan.getAlertEnabled());
+            planConfig.put("alert_level", plan.getAlertLevel());
+            planConfig.put("polygon_points", plan.getPolygonPoints());
+            planConfig.put("polygon_points_pixel", plan.getPolygonPointsPixel());
+
+            if (plan.getBufferFenceId() != null) {
+                GeoFence bufferFence = geoFenceService.getById(plan.getBufferFenceId());
+                if (bufferFence != null) {
+                    planConfig.put("buffer_polygon_points", bufferFence.getPolygonPoints());
+                    planConfig.put("buffer_polygon_points_pixel", bufferFence.getPolygonPointsPixel());
+                }
+            }
+
+            aiEngineService.syncConstructionPlan(plan.getCameraId(), planConfig);
+            log.info("同步施工计划配置到AI引擎: planId={}, cameraId={}", plan.getId(), plan.getCameraId());
+        } catch (Exception e) {
+            log.error("同步施工计划配置到AI引擎失败: planId={}, error={}", plan.getId(), e.getMessage());
         }
     }
 

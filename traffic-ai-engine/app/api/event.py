@@ -14,7 +14,8 @@ from app.schemas.event import (
     EventQueryResponse,
     TrafficEvent,
     EventType,
-    EventSeverity
+    EventSeverity,
+    ConstructionPlanConfigRequest,
 )
 
 router = APIRouter()
@@ -26,10 +27,13 @@ detected_events: List[TrafficEvent] = []
 async def analyze_events(request: EventDetectionRequest):
     start_time = time.time()
 
-    events = event_analyzer.analyze(
+    result = event_analyzer.analyze(
         camera_id=request.camera_id or request.frame_id,
         tracked_objects=request.tracked_objects
     )
+
+    events = result[0] if isinstance(result, tuple) else result
+    cone_detection = result[1] if isinstance(result, tuple) and len(result) > 1 else None
 
     detected_events.extend(events)
     if len(detected_events) > 1000:
@@ -40,7 +44,8 @@ async def analyze_events(request: EventDetectionRequest):
     return EventDetectionResponse(
         frame_id=request.frame_id,
         events=events,
-        processing_time=round(processing_time, 4)
+        processing_time=round(processing_time, 4),
+        extra={"cone_detection": cone_detection} if cone_detection else None
     )
 
 
@@ -230,4 +235,55 @@ async def get_pedestrian_road_region(camera_id: str):
         "camera_id": camera_id,
         "road_region": [[p[0], p[1]] for p in region],
         "is_default": False
+    }
+
+
+@router.post("/construction-plan/sync")
+async def sync_construction_plan(request: ConstructionPlanConfigRequest):
+    try:
+        camera_id = str(request.cameraId)
+        plan_config = request.planConfig
+
+        if not plan_config or plan_config.get("plan_status") != 2:
+            event_analyzer.remove_construction_plan(camera_id)
+            return {
+                "status": "success",
+                "message": f"Camera {camera_id} construction plan removed (not active)",
+                "camera_id": camera_id
+            }
+
+        event_analyzer.set_construction_plan(camera_id, plan_config)
+
+        return {
+            "status": "success",
+            "message": f"Camera {camera_id} construction plan synced",
+            "camera_id": camera_id,
+            "plan_name": plan_config.get("plan_name"),
+            "standard_cone_count": plan_config.get("standard_cone_count", 0)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to sync construction plan: {str(e)}")
+
+
+@router.delete("/construction-plan/{camera_id}")
+async def remove_construction_plan(camera_id: str):
+    try:
+        event_analyzer.remove_construction_plan(camera_id)
+        return {
+            "status": "success",
+            "message": f"Camera {camera_id} construction plan removed",
+            "camera_id": camera_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to remove construction plan: {str(e)}")
+
+
+@router.get("/construction-plan/{camera_id}")
+async def get_construction_plan(camera_id: str):
+    plan = event_analyzer.get_construction_plan(camera_id)
+    return {
+        "status": "success",
+        "camera_id": camera_id,
+        "plan_config": plan,
+        "has_plan": plan is not None
     }

@@ -100,6 +100,8 @@ export interface AlertEvent {
   accidentPriority?: number;
   accidentEvaluationReasons?: string;
   sourceNodeCode?: string;
+  constructionPlanId?: number;
+  metadata?: Record<string, any>;
 }
 
 export const ACCIDENT_SEVERITY_OPTIONS = [
@@ -417,6 +419,15 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   DEBRIS: '路面抛洒物',
   INTRUSION: '区域入侵',
   PEDESTRIAN_INTRUSION: '行人闯入',
+  CONE_MISSING: '锥桶缺失',
+  CONSTRUCTION_SPEEDING: '施工区超速',
+  CONSTRUCTION_INTRUSION: '施工区闯入',
+  STOPPED_VEHICLE: '车辆停留',
+  CONGESTION: '交通拥堵',
+  SPEEDING: '超速行驶',
+  RED_LIGHT: '闯红灯',
+  WRONG_WAY: '逆向行驶',
+  ILLEGAL_PARKING: '违章停车',
 };
 
 export const FENCE_TYPE_LABELS: Record<number, string> = {
@@ -448,6 +459,12 @@ export const EVENT_TYPE_COLORS: Record<string, string> = {
   DEBRIS: 'purple',
   INTRUSION: 'blue',
   PEDESTRIAN_INTRUSION: 'geekblue',
+  CONE_MISSING: 'gold',
+  CONSTRUCTION_SPEEDING: 'volcano',
+  CONSTRUCTION_INTRUSION: 'orange',
+  STOPPED_VEHICLE: 'magenta',
+  CONGESTION: 'geekblue',
+  SPEEDING: 'volcano',
 };
 
 export const EVENT_LEVEL_LABELS: Record<number, string> = {

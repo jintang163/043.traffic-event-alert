@@ -19,7 +19,7 @@ from app.core.tracker import get_tracker, reset_tracker, TrackState
 from app.core.cross_camera_tracker import cross_camera_tracker
 from app.core.feature_extractor import plate_recognizer, reid_extractor
 from app.core.image_enhancer import night_backlight_enhancer, WeatherCondition
-from app.schemas.event import AiEventCallbackRequest
+from app.schemas.event import AiEventCallbackRequest, ConeDetectionCallbackRequest
 from app.schemas.reid import CrossCameraTrackRequest, LicensePlateResult, ReIDFeature
 
 logger = logging.getLogger(__name__)
@@ -321,13 +321,16 @@ class StreamProcessor:
                 ]
 
             if stream_info["enable_event"]:
-                events = event_analyzer.analyze(
+                analyze_result = event_analyzer.analyze(
                     camera_id=str(camera_id),
                     tracked_objects=tracked_objects,
                     frame_width=processed_frame.shape[1],
                     frame_height=processed_frame.shape[0],
                     frame=processed_frame,
                 )
+
+                events = analyze_result[0] if isinstance(analyze_result, tuple) else analyze_result
+                cone_detection_result = analyze_result[1] if isinstance(analyze_result, tuple) and len(analyze_result) > 1 else None
 
                 for event in events:
                     if not stream_info["recording_lock"].locked():
@@ -336,6 +339,13 @@ class StreamProcessor:
                             args=(camera_id, event, processed_frame, stream_info),
                             daemon=True
                         ).start()
+
+                if cone_detection_result is not None:
+                    threading.Thread(
+                        target=self._send_cone_detection_callback,
+                        args=(cone_detection_result,),
+                        daemon=True
+                    ).start()
 
             self._process_tracking_features(camera_id, processed_frame, tracked_objects, stream_info)
 
@@ -774,6 +784,7 @@ class StreamProcessor:
                 trackData=[obj.model_dump() for obj in event.involved_objects] if event.involved_objects else None,
                 bbox=event.involved_objects[0].bbox.model_dump() if event.involved_objects else None,
                 licensePlates=[lp.model_dump(mode="json") for lp in event.license_plates] if event.license_plates else None,
+                metadata=event.metadata if event.metadata else None,
             )
 
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -787,6 +798,50 @@ class StreamProcessor:
                 )
         except Exception as e:
             logger.error(f"Failed to send event callback: {e}")
+
+    async def _send_cone_detection_callback_async(self, detection_result: Dict):
+        if not settings.BACKEND_ENABLE_CALLBACK:
+            return
+
+        try:
+            callback_data = ConeDetectionCallbackRequest(
+                planId=detection_result.get("plan_id"),
+                planCode=detection_result.get("plan_code"),
+                planName=detection_result.get("plan_name"),
+                cameraId=detection_result.get("camera_id"),
+                detectionTime=detection_result.get("detection_time"),
+                detectedConeCount=detection_result.get("detected_cone_count", 0),
+                standardConeCount=detection_result.get("standard_cone_count", 0),
+                missingConeCount=detection_result.get("missing_cone_count", 0),
+                isCompliant=detection_result.get("is_compliant", 1),
+                complianceRate=detection_result.get("compliance_rate", 100.0),
+                avgConfidence=detection_result.get("avg_confidence", 0.0),
+                alertTriggered=detection_result.get("alert_triggered", 0),
+                alertLevel=detection_result.get("alert_level"),
+                conePositions=detection_result.get("cone_positions"),
+                description=detection_result.get("description"),
+            )
+
+            callback_url = settings.BACKEND_CALLBACK_URL.replace("/api/alerts/callback", "/api/construction/cones")
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    callback_url,
+                    json=callback_data.model_dump(mode="json")
+                )
+                logger.info(
+                    f"Cone detection callback sent: plan=%s, detected=%d, "
+                    f"compliant=%s, status=%d",
+                    detection_result.get("plan_code"),
+                    detection_result.get("detected_cone_count", 0),
+                    detection_result.get("is_compliant") == 1,
+                    response.status_code
+                )
+        except Exception as e:
+            logger.error(f"Failed to send cone detection callback: {e}")
+
+    def _send_cone_detection_callback(self, detection_result: Dict):
+        asyncio.run(self._send_cone_detection_callback_async(detection_result))
 
     def get_stream_status(self, camera_id: Optional[int] = None) -> Dict:
         with self._lock:

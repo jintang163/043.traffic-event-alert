@@ -104,6 +104,11 @@ public class ConstructionZoneMonitorService {
                 boolean isSpeeding = speed > speedLimit;
 
                 if (inZone) {
+                    double overSpeedPercent = speed > 0 ? (speed / speedLimit - 1) * 100 : 0;
+                    String desc = String.format("车辆闯入施工区[%s]，限速%.0fkm/h，实测%.1fkm/h%s",
+                            plan.getPlanName(), speedLimit, speed,
+                            isSpeeding ? String.format("，超速%.1f%%", overSpeedPercent) : "");
+
                     ConstructionZoneViolation violation = new ConstructionZoneViolation();
                     violation.setViolationType("CONSTRUCTION_INTRUSION");
                     violation.setViolationTypeLabel("闯入施工区");
@@ -116,8 +121,13 @@ public class ConstructionZoneMonitorService {
                     violation.setLongitude(track.getLongitude());
                     violation.setLatitude(track.getLatitude());
                     violation.setSeverity(isSpeeding ? 3 : 2);
+                    violation.setDescription(desc);
                     violations.add(violation);
                 } else if (inBuffer && isSpeeding) {
+                    double overSpeedPercent = (speed / speedLimit - 1) * 100;
+                    String desc = String.format("施工区[%s]缓冲区车辆超速，限速%.0fkm/h，实测%.1fkm/h，超速%.1f%%",
+                            plan.getPlanName(), speedLimit, speed, overSpeedPercent);
+
                     ConstructionZoneViolation violation = new ConstructionZoneViolation();
                     violation.setViolationType("CONSTRUCTION_SPEEDING");
                     violation.setViolationTypeLabel("施工区超速");
@@ -130,6 +140,7 @@ public class ConstructionZoneMonitorService {
                     violation.setLongitude(track.getLongitude());
                     violation.setLatitude(track.getLatitude());
                     violation.setSeverity(2);
+                    violation.setDescription(desc);
                     violations.add(violation);
                 }
             }
@@ -232,6 +243,10 @@ public class ConstructionZoneMonitorService {
         private BigDecimal longitude;
         private BigDecimal latitude;
         private int severity;
+        private String description;
+
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
 
         public String getViolationType() { return violationType; }
         public void setViolationType(String violationType) { this.violationType = violationType; }
