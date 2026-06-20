@@ -44,6 +44,41 @@ video:
   segmentDuration: 2
   hlsListSize: 0
   enabled: true
+  quality:
+    enabled: true
+    detectionIntervalMinutes: 15
+    concurrentDetectionLimit: 10
+    abnormalTriggerThreshold: 3
+    alertCooldownMinutes: 30
+    thresholds:
+      blackScreenBrightness: 15
+      lowBrightness: 40
+      highBrightness: 220
+      lowContrast: 35
+      highContrast: 95
+      severeBlur: 0.35
+      slightBlur: 0.65
+      severeOcclusion: 30
+      slightOcclusion: 10
+      freezeFrameChange: 0.02
+      freezeMinFrames: 5
+      severeColorCast: 0.25
+      slightColorCast: 0.12
+    scoring:
+      brightnessWeight: 20
+      contrastWeight: 15
+      blurWeight: 25
+      occlusionWeight: 20
+      freezeWeight: 15
+      noiseWeight: 5
+      excellentMin: 90
+      goodMin: 75
+      mediumMin: 60
+      poorMin: 40
+      healthExcellent: 90
+      healthSubhealthy: 75
+      healthAbnormal: 50
+      healthCritical: 25
 
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml

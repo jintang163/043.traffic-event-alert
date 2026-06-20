@@ -26,4 +26,10 @@ public final class EventType {
     public static final String COLLISION_SOUND = "COLLISION_SOUND";
     public static final String SIREN = "SIREN";
     public static final String ABNORMAL_NOISE = "ABNORMAL_NOISE";
+
+    public static final String BLACK_SCREEN = "BLACK_SCREEN";
+    public static final String VIDEO_BLUR = "VIDEO_BLUR";
+    public static final String VIDEO_OCCLUSION = "VIDEO_OCCLUSION";
+    public static final String VIDEO_FREEZE = "VIDEO_FREEZE";
+    public static final String VIDEO_QUALITY_ABNORMAL = "VIDEO_QUALITY_ABNORMAL";
 }
