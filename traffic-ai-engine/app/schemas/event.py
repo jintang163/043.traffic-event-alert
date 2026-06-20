@@ -17,6 +17,7 @@ class EventType(str, Enum):
     WRONG_WAY = "wrong_way"
     ILLEGAL_PARKING = "illegal_parking"
     PEDESTRIAN_CROSSING = "pedestrian_crossing"
+    PEDESTRIAN_INTRUSION = "PEDESTRIAN_INTRUSION"
     TRAFFIC_CONGESTION = "traffic_congestion"
 
 

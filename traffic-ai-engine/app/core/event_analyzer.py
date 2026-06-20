@@ -22,6 +22,8 @@ class EventAnalyzer:
     def __init__(self):
         self.cooldown_events: Dict[str, float] = {}
         self.cooldown_seconds = 60
+        self.pedestrian_intrusion_tracks: Dict[str, Dict[str, float]] = {}
+        self.pedestrian_road_regions: Dict[str, List[Tuple[float, float]]] = {}
 
     def analyze(
         self,
@@ -46,6 +48,12 @@ class EventAnalyzer:
 
         intrusion_events = self._detect_intrusion(camera_id, tracked_objects, frame_width, frame_height)
         events.extend(intrusion_events)
+
+        if settings.EVENT_PEDESTRIAN_INTRUSION_ENABLED:
+            pedestrian_intrusion_events = self._detect_pedestrian_intrusion(
+                camera_id, tracked_objects, frame_width, frame_height
+            )
+            events.extend(pedestrian_intrusion_events)
 
         return events
 
@@ -273,6 +281,140 @@ class EventAnalyzer:
             )
 
         return events
+
+    def _detect_pedestrian_intrusion(
+        self,
+        camera_id: str,
+        tracked_objects: List[TrackedObject],
+        frame_width: int,
+        frame_height: int
+    ) -> List[TrafficEvent]:
+        events: List[TrafficEvent] = []
+
+        pedestrian_objects = [obj for obj in tracked_objects if obj.class_id == 0 or obj.class_name == "person"]
+        if not pedestrian_objects:
+            self._cleanup_pedestrian_tracks(camera_id, [])
+            return events
+
+        road_region = self._get_road_region(camera_id, frame_width, frame_height)
+
+        now = time.time()
+        camera_track_ids = set()
+
+        for obj in pedestrian_objects:
+            track_id = str(obj.track_id)
+            camera_track_ids.add(track_id)
+
+            bbox_center_x = (obj.bbox.x1 + obj.bbox.x2) / 2
+            bbox_bottom_y = obj.bbox.y2
+
+            is_in_road = self._is_point_in_polygon(bbox_center_x, bbox_bottom_y, road_region)
+
+            track_key = f"{camera_id}_{track_id}"
+
+            if is_in_road:
+                if track_key not in self.pedestrian_intrusion_tracks:
+                    self.pedestrian_intrusion_tracks[track_key] = {
+                        "enter_time": now,
+                        "last_seen": now,
+                        "alerted": False
+                    }
+                else:
+                    self.pedestrian_intrusion_tracks[track_key]["last_seen"] = now
+
+                track_info = self.pedestrian_intrusion_tracks[track_key]
+                duration = now - track_info["enter_time"]
+
+                if (duration >= settings.EVENT_PEDESTRIAN_INTRUSION_STAY_SECONDS
+                        and not track_info["alerted"]):
+
+                    event_key = f"pedestrian_intrusion_{camera_id}_{track_id}"
+                    if self._is_in_cooldown(event_key):
+                        continue
+
+                    level_value = min(settings.EVENT_PEDESTRIAN_INTRUSION_DEFAULT_LEVEL, 4)
+                    severity_level = EventSeverity(level_value)
+
+                    confidence = min(0.95, 0.7 + min(duration, 30) * 0.01)
+                    if confidence >= settings.EVENT_CONFIDENCE_THRESHOLD:
+                        event = self._create_event(
+                            camera_id=camera_id,
+                            event_type=EventType.PEDESTRIAN_INTRUSION,
+                            severity=severity_level,
+                            involved_objects=[obj],
+                            confidence=confidence,
+                            description=f"检测到行人闯入行车道，行人ID: {track_id}，已停留{duration:.1f}秒"
+                        )
+                        event.metadata = {
+                            "track_id": track_id,
+                            "stay_duration": duration,
+                            "road_region_type": "default",
+                            "led_message": "行人请离开",
+                            "intrusion_point": {
+                                "x": bbox_center_x,
+                                "y": bbox_bottom_y
+                            }
+                        }
+                        events.append(event)
+                        track_info["alerted"] = True
+                        logger.warning(
+                            f"行人闯入行车道: camera={camera_id}, track={track_id}, "
+                            f"duration={duration:.1f}s, confidence={confidence:.3f}"
+                        )
+            else:
+                if track_key in self.pedestrian_intrusion_tracks:
+                    del self.pedestrian_intrusion_tracks[track_key]
+
+        self._cleanup_pedestrian_tracks(camera_id, camera_track_ids)
+
+        return events
+
+    def _get_road_region(
+        self,
+        camera_id: str,
+        frame_width: int,
+        frame_height: int
+    ) -> List[Tuple[float, float]]:
+        if camera_id in self.pedestrian_road_regions:
+            return self.pedestrian_road_regions[camera_id]
+
+        default_region = [
+            (0, int(frame_height * 0.35)),
+            (frame_width, int(frame_height * 0.35)),
+            (frame_width, frame_height),
+            (0, frame_height),
+        ]
+        return default_region
+
+    def set_road_region(self, camera_id: str, region_points: List[Tuple[float, float]]):
+        self.pedestrian_road_regions[camera_id] = region_points
+
+    def _is_point_in_polygon(self, x: float, y: float, polygon: List[Tuple[float, float]]) -> bool:
+        n = len(polygon)
+        if n < 3:
+            return False
+
+        inside = False
+        j = n - 1
+        for i in range(n):
+            xi, yi = polygon[i]
+            xj, yj = polygon[j]
+
+            if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+                inside = not inside
+            j = i
+
+        return inside
+
+    def _cleanup_pedestrian_tracks(self, camera_id: str, active_track_ids: set):
+        keys_to_delete = []
+        for key in self.pedestrian_intrusion_tracks:
+            if key.startswith(f"{camera_id}_"):
+                track_id = key.split(f"{camera_id}_")[1]
+                if track_id not in active_track_ids:
+                    keys_to_delete.append(key)
+        for key in keys_to_delete:
+            del self.pedestrian_intrusion_tracks[key]
 
     def _get_fence_type_text(self, fence_type: int) -> str:
         type_map = {

@@ -414,6 +414,7 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   REVERSE: '车辆逆行',
   DEBRIS: '路面抛洒物',
   INTRUSION: '区域入侵',
+  PEDESTRIAN_INTRUSION: '行人闯入',
 };
 
 export const FENCE_TYPE_LABELS: Record<number, string> = {
@@ -438,6 +439,14 @@ export const DETECT_TARGET_OPTIONS = [
   { value: 'motorcycle', label: '摩托车' },
   { value: 'bicycle', label: '自行车' },
 ];
+
+export const EVENT_TYPE_COLORS: Record<string, string> = {
+  ACCIDENT: 'red',
+  REVERSE: 'orange',
+  DEBRIS: 'purple',
+  INTRUSION: 'blue',
+  PEDESTRIAN_INTRUSION: 'geekblue',
+};
 
 export const EVENT_LEVEL_LABELS: Record<number, string> = {
   1: '一般',

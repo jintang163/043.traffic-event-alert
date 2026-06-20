@@ -41,8 +41,10 @@ import { alertApi, workOrderApi, departmentApi, globalTrackApi, plateRecognition
 import { wsService } from '@/services/websocket';
 import { useAlertStore } from '@/store/alertStore';
 import EventReplayModal from '@/components/EventReplayModal';
+import LedSignDisplay from '@/components/LedSignDisplay';
 import {
   EVENT_TYPE_LABELS,
+  EVENT_TYPE_COLORS,
   EVENT_LEVEL_LABELS,
   EVENT_LEVEL_COLORS,
   ALERT_STATUS_LABELS,
@@ -90,6 +92,8 @@ const Alerts: React.FC = () => {
   const [debrisCategories, setDebrisCategories] = useState<DebrisCategoryOption[]>([]);
   const [majorAlertModal, setMajorAlertModal] = useState(false);
   const [majorAlertInfo, setMajorAlertInfo] = useState<AlertEvent | null>(null);
+  const [pedestrianAlertModal, setPedestrianAlertModal] = useState(false);
+  const [pedestrianAlertInfo, setPedestrianAlertInfo] = useState<AlertEvent | null>(null);
   const [replayModal, setReplayModal] = useState(false);
 
   const loadData = async () => {
@@ -122,6 +126,10 @@ const Alerts: React.FC = () => {
     const unsub = wsService.onAlert((alert) => {
       addAlert(alert as any);
       loadData();
+      if (alert.eventType === 'PEDESTRIAN_INTRUSION') {
+        setPedestrianAlertInfo(alert as any);
+        setPedestrianAlertModal(true);
+      }
     });
 
     const unsubMajor = wsService.onMajorAlert((alert) => {
@@ -356,7 +364,7 @@ const Alerts: React.FC = () => {
       render: (text, record) => (
         <Tag
           icon={<WarningOutlined />}
-          color={text === 'ACCIDENT' ? 'red' : text === 'REVERSE' ? 'orange' : text === 'DEBRIS' ? 'purple' : 'blue'}
+          color={EVENT_TYPE_COLORS[text] || 'blue'}
         >
           {EVENT_TYPE_LABELS[text] || text}
         </Tag>
@@ -639,7 +647,7 @@ const Alerts: React.FC = () => {
             <Descriptions column={2} bordered size="small">
               <Descriptions.Item label="事件编号">{currentAlert.eventNo}</Descriptions.Item>
               <Descriptions.Item label="事件类型">
-                <Tag color={currentAlert.eventType === 'ACCIDENT' ? 'red' : currentAlert.eventType === 'REVERSE' ? 'orange' : 'purple'}>
+                <Tag color={EVENT_TYPE_COLORS[currentAlert.eventType] || 'default'}>
                   {EVENT_TYPE_LABELS[currentAlert.eventType] || currentAlert.eventType}
                 </Tag>
               </Descriptions.Item>
@@ -1109,6 +1117,55 @@ const Alerts: React.FC = () => {
               )}
               {majorAlertInfo.description && <p><strong>描述:</strong> {majorAlertInfo.description}</p>}
             </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={pedestrianAlertModal}
+        onCancel={() => setPedestrianAlertModal(false)}
+        footer={[
+          <Button key="close" onClick={() => setPedestrianAlertModal(false)}>关闭</Button>,
+          <Button key="view" type="primary" onClick={() => {
+            setPedestrianAlertModal(false);
+            if (pedestrianAlertInfo) handleView(pedestrianAlertInfo);
+          }}>查看详情</Button>,
+        ]}
+        width={560}
+        closable={false}
+        styles={{ body: { padding: 24 } }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>🚶‍♂️⚠️</div>
+          <h2 style={{ color: '#1890ff', marginBottom: 8 }}>行人闯入预警</h2>
+          <p style={{ color: '#666', marginBottom: 16 }}>检测到行人进入行车道区域</p>
+
+          {pedestrianAlertInfo && (
+            <>
+              <div style={{ textAlign: 'left', background: '#e6f7ff', padding: 16, borderRadius: 8, marginBottom: 16 }}>
+                <p><strong>事件编号:</strong> {pedestrianAlertInfo.eventNo}</p>
+                <p><strong>摄像头:</strong> {pedestrianAlertInfo.cameraName}</p>
+                <p><strong>位置:</strong> {pedestrianAlertInfo.location || '-'}</p>
+                <p><strong>时间:</strong> {pedestrianAlertInfo.eventTime}</p>
+                <p><strong>告警级别:</strong>
+                  <Tag color="geekblue" style={{ marginLeft: 8, fontWeight: 600 }}>
+                    {EVENT_LEVEL_LABELS[pedestrianAlertInfo.eventLevel || 2] || '紧急'}
+                  </Tag>
+                </p>
+                {pedestrianAlertInfo.description && <p><strong>描述:</strong> {pedestrianAlertInfo.description}</p>}
+              </div>
+
+              <div style={{ textAlign: 'left' }}>
+                <p style={{ marginBottom: 8, fontWeight: 600, color: '#333' }}>📺 路侧情报板联动</p>
+                <LedSignDisplay
+                  cameraId={Number(pedestrianAlertInfo.cameraId)}
+                  message="行人请离开"
+                  isAlert={true}
+                  color="RED"
+                  brightness={100}
+                />
+              </div>
+            </>
           )}
         </div>
       </Modal>

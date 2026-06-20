@@ -908,6 +908,16 @@ INSERT INTO notify_rule (rule_name, event_type, event_level, channel_id, templat
 ('逆行-短信值班', 'REVERSE', NULL, 2, (SELECT id FROM notify_template WHERE template_code='TPL_SMS_REVERSE'), 1, NULL, 0, 1, 2, 10, NOW()),
 ('逆行-紧急语音外呼', 'REVERSE', 3, 3, (SELECT id FROM notify_template WHERE template_code='TPL_VOICE_REVERSE'), 1, NULL, 0, 1, 1, 11, NOW());
 
+INSERT INTO notify_template (template_code, template_name, channel_type, event_type, event_level, title_template, content_template, status, create_time) VALUES
+('TPL_DINGTALK_PEDESTRIAN', '行人闯入-钉钉模板', 'DINGTALK', 'PEDESTRIAN_INTRUSION', NULL, '行人闯入预警', '【${levelText}】行人闯入预警\n摄像头: ${cameraName}\n位置: ${location}\n时间: ${eventTime}\n描述: 检测到行人进入行车道区域\nLED情报板已联动显示"行人请离开"', 1, NOW()),
+('TPL_SMS_PEDESTRIAN', '行人闯入-短信模板', 'SMS', 'PEDESTRIAN_INTRUSION', NULL, '行人闯入告警', '【交通告警】行人闯入:${cameraName},${location},${eventTime}', 1, NOW()),
+('TPL_VOICE_PEDESTRIAN', '行人闯入-语音外呼模板', 'VOICE', 'PEDESTRIAN_INTRUSION', 3, '行人闯入语音告警', '紧急告警:${location}检测到行人闯入行车道,请立即处置', 1, NOW());
+
+INSERT INTO notify_rule (rule_name, event_type, event_level, channel_id, template_id, recipient_type, recipient_ids, at_all, enabled, priority, sort_order, create_time) VALUES
+('行人闯入-钉钉通知', 'PEDESTRIAN_INTRUSION', NULL, 1, (SELECT id FROM notify_template WHERE template_code='TPL_DINGTALK_PEDESTRIAN'), 1, NULL, 0, 1, 2, 12, NOW()),
+('行人闯入-短信值班', 'PEDESTRIAN_INTRUSION', NULL, 2, (SELECT id FROM notify_template WHERE template_code='TPL_SMS_PEDESTRIAN'), 1, NULL, 0, 1, 2, 13, NOW()),
+('行人闯入-紧急语音外呼', 'PEDESTRIAN_INTRUSION', 3, 3, (SELECT id FROM notify_template WHERE template_code='TPL_VOICE_PEDESTRIAN'), 1, NULL, 0, 1, 1, 14, NOW());
+
 CREATE TABLE IF NOT EXISTS weather_data (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     record_time DATETIME NOT NULL COMMENT '记录时间',

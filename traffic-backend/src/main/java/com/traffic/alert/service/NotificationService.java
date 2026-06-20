@@ -630,6 +630,7 @@ public class NotificationService {
                 }
                 yield "路面抛洒物";
             }
+            case "PEDESTRIAN_INTRUSION" -> "行人闯入";
             default -> alert.getEventType();
         };
 

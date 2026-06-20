@@ -49,6 +49,7 @@ public class AlertEventService {
     private final VideoRecordingService videoRecordingService;
     private final PlateRecognitionService plateRecognitionService;
     private final PolicePushService policePushService;
+    private final LedSignService ledSignService;
 
     private static final DateTimeFormatter EVENT_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -185,6 +186,15 @@ public class AlertEventService {
         if (event.getEventLevel() != null && event.getEventLevel() >= 2) {
             ptzCruiseService.pauseCruiseForEvent(camera.getId());
             log.info("事件联动暂停巡航: cameraId={}, eventNo={}", camera.getId(), eventNo);
+        }
+
+        if ("PEDESTRIAN_INTRUSION".equals(event.getEventType())) {
+            try {
+                ledSignService.displayPedestrianWarning(camera.getId());
+                log.info("行人闯入事件联动LED情报板: cameraId={}, eventNo={}", camera.getId(), eventNo);
+            } catch (Exception e) {
+                log.warn("行人闯入LED情报板联动失败: eventNo={}, error={}", eventNo, e.getMessage());
+            }
         }
 
         if (isMajorAccident) {
@@ -616,6 +626,7 @@ public class AlertEventService {
                         yield debrisLabel;
                     }
                     case "INTRUSION" -> "区域入侵";
+                    case "PEDESTRIAN_INTRUSION" -> "行人闯入";
                     default -> event.getEventType();
                 };
                 String majorPrefix = isMajor ? "【紧急】" : "";

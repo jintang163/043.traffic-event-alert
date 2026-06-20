@@ -378,6 +378,21 @@ export const globalTrackApi = {
     request.get<any, Result<any>>(`/api/tracks/event-replay/${eventId}`, { params: { beforeMinutes } }),
 };
 
+export const ledSignApi = {
+  getStatus: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/led-sign/status/${cameraId}`),
+  displayPedestrianWarning: (cameraId: number) =>
+    request.post<any, Result<any>>(`/api/led-sign/pedestrian-warning/${cameraId}`),
+  displayMessage: (cameraId: number, data: any) =>
+    request.post<any, Result<any>>(`/api/led-sign/display/${cameraId}`, data),
+  restoreDefault: (cameraId: number) =>
+    request.post<any, Result<any>>(`/api/led-sign/restore/${cameraId}`),
+  setDefaultMessage: (cameraId: number, message: string) =>
+    request.put<any, Result<any>>(`/api/led-sign/default-message/${cameraId}`, { message }),
+  setBrightness: (cameraId: number, brightness: number) =>
+    request.put<any, Result<any>>(`/api/led-sign/brightness/${cameraId}`, { brightness }),
+};
+
 export const ruleApi = {
   fieldDefinitions: () =>
     request.get<any, Result<any>>('/api/rules/field-definitions'),
