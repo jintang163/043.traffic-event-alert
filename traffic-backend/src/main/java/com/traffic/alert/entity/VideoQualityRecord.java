@@ -72,6 +72,10 @@ public class VideoQualityRecord extends BaseEntity {
 
     private String algorithmVersion;
 
+    private Integer isRealFrame;
+
+    private Long frameCaptureCostMs;
+
     private String extraData;
 
     private String description;

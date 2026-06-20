@@ -432,6 +432,11 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   COLLISION_SOUND: '碰撞声',
   SIREN: '警笛声',
   ABNORMAL_NOISE: '异常噪音',
+  BLACK_SCREEN: '画面黑屏',
+  VIDEO_BLUR: '画面模糊',
+  VIDEO_OCCLUSION: '画面遮挡',
+  VIDEO_FREEZE: '画面冻结',
+  VIDEO_QUALITY_ABNORMAL: '视频质量异常',
 };
 
 export const FENCE_TYPE_LABELS: Record<number, string> = {
@@ -473,6 +478,11 @@ export const EVENT_TYPE_COLORS: Record<string, string> = {
   COLLISION_SOUND: 'red',
   SIREN: 'blue',
   ABNORMAL_NOISE: 'default',
+  BLACK_SCREEN: 'red',
+  VIDEO_BLUR: 'orange',
+  VIDEO_OCCLUSION: 'gold',
+  VIDEO_FREEZE: 'magenta',
+  VIDEO_QUALITY_ABNORMAL: 'geekblue',
 };
 
 export const EVENT_LEVEL_LABELS: Record<number, string> = {
@@ -1357,4 +1367,190 @@ export const AUDIO_EVENT_TYPE_COLORS: Record<string, string> = {
   COLLISION_SOUND: '#ff4d4f',
   SIREN: '#1890ff',
   ABNORMAL_NOISE: '#8c8c8c',
+};
+
+export interface VideoQualityRecord {
+  id: number;
+  cameraId: number;
+  cameraName?: string;
+  cameraCode?: string;
+  detectTime: string;
+  overallScore: number;
+  brightnessScore?: number;
+  contrastScore?: number;
+  sharpnessScore?: number;
+  noiseScore?: number;
+  colorScore?: number;
+  stabilityScore?: number;
+  abnormalType?: string;
+  abnormalTypeName?: string;
+  abnormalConfidence?: number;
+  frameUrl?: string;
+  streamUrl?: string;
+  detectSource?: string;
+  status?: number;
+  remark?: string;
+  createTime?: string;
+}
+
+export interface VideoQualityAnalysisResult {
+  overallScore: number;
+  overallLevel: number;
+  overallLevelLabel?: string;
+  brightnessScore?: number;
+  brightnessLevel?: number;
+  contrastScore?: number;
+  contrastLevel?: number;
+  sharpnessScore?: number;
+  sharpnessLevel?: number;
+  noiseScore?: number;
+  noiseLevel?: number;
+  colorScore?: number;
+  colorLevel?: number;
+  stabilityScore?: number;
+  stabilityLevel?: number;
+  detectedAbnormalities?: string[];
+  abnormalDetails?: Record<string, any>;
+  suggestions?: string[];
+  analyzeTime?: string;
+  frameUrl?: string;
+}
+
+export interface VideoHealthDiagnosis {
+  id: number;
+  diagnosisNo?: string;
+  cameraId: number;
+  cameraName?: string;
+  cameraCode?: string;
+  diagnosisType?: string;
+  diagnosisTypeName?: string;
+  diagnosisTime: string;
+  diagnosisPeriod?: string;
+  healthScore: number;
+  healthLevel: number;
+  healthLevelLabel?: string;
+  detectCount?: number;
+  abnormalCount?: number;
+  abnormalTypes?: string;
+  abnormalTypeList?: string[];
+  avgOverallScore?: number;
+  avgBrightnessScore?: number;
+  avgContrastScore?: number;
+  avgSharpnessScore?: number;
+  avgNoiseScore?: number;
+  avgColorScore?: number;
+  avgStabilityScore?: number;
+  abnormalTrendData?: string;
+  qualityTrendData?: string;
+  problems?: string;
+  suggestions?: string;
+  status?: number;
+  reportUrl?: string;
+  createTime?: string;
+}
+
+export interface VideoQualityDashboard {
+  totalCameras: number;
+  onlineCameras: number;
+  detectingCameras: number;
+  todayDetectCount: number;
+  todayAbnormalCount: number;
+  abnormalRate?: number;
+  avgQualityScore: number;
+  healthLevelDistribution?: { level: number; count: number; label?: string }[];
+  qualityLevelDistribution?: { level: number; count: number; label?: string }[];
+  abnormalTypeStats?: AbnormalTypeStat[];
+  recentRecords?: VideoQualityRecord[];
+  unhealthyCameras?: CameraHealthItem[];
+  qualityTrend?: { time: string; score: number }[];
+  abnormalTrend?: { time: string; count: number }[];
+}
+
+export interface AbnormalTypeStat {
+  abnormalType: string;
+  abnormalTypeName?: string;
+  count: number;
+  ratio?: number;
+  color?: string;
+}
+
+export interface CameraHealthItem {
+  cameraId: number;
+  cameraName?: string;
+  cameraCode?: string;
+  healthScore: number;
+  healthLevel: number;
+  healthLevelLabel?: string;
+  abnormalCount?: number;
+  lastDetectTime?: string;
+  lastAbnormalType?: string;
+  lastAbnormalTypeName?: string;
+  location?: string;
+  longitude?: number;
+  latitude?: number;
+}
+
+export const VIDEO_QUALITY_LEVEL_LABELS: Record<number, string> = {
+  1: '优秀',
+  2: '良好',
+  3: '一般',
+  4: '较差',
+  5: '很差',
+};
+
+export const VIDEO_QUALITY_LEVEL_COLORS: Record<number, string> = {
+  1: '#52c41a',
+  2: '#1890ff',
+  3: '#faad14',
+  4: '#fa8c16',
+  5: '#ff4d4f',
+};
+
+export const VIDEO_HEALTH_LEVEL_LABELS: Record<number, string> = {
+  1: '健康',
+  2: '良好',
+  3: '亚健康',
+  4: '异常',
+  5: '严重异常',
+};
+
+export const VIDEO_HEALTH_LEVEL_COLORS: Record<number, string> = {
+  1: '#52c41a',
+  2: '#1890ff',
+  3: '#faad14',
+  4: '#fa8c16',
+  5: '#ff4d4f',
+};
+
+export const ABNORMAL_TYPE_LABELS: Record<string, string> = {
+  BLACK_SCREEN: '画面黑屏',
+  VIDEO_BLUR: '画面模糊',
+  VIDEO_OCCLUSION: '画面遮挡',
+  VIDEO_FREEZE: '画面冻结',
+  VIDEO_QUALITY_ABNORMAL: '质量异常',
+  BRIGHTNESS_ABNORMAL: '亮度异常',
+  CONTRAST_ABNORMAL: '对比度异常',
+  COLOR_ABNORMAL: '色彩异常',
+  NOISE_EXCESSIVE: '噪点过多',
+  STREAM_INTERRUPT: '流中断',
+};
+
+export const ABNORMAL_TYPE_COLORS: Record<string, string> = {
+  BLACK_SCREEN: '#ff4d4f',
+  VIDEO_BLUR: '#fa8c16',
+  VIDEO_OCCLUSION: '#faad14',
+  VIDEO_FREEZE: '#722ed1',
+  VIDEO_QUALITY_ABNORMAL: '#1890ff',
+  BRIGHTNESS_ABNORMAL: '#faad14',
+  CONTRAST_ABNORMAL: '#13c2c2',
+  COLOR_ABNORMAL: '#eb2f96',
+  NOISE_EXCESSIVE: '#8c8c8c',
+  STREAM_INTERRUPT: '#ff4d4f',
+};
+
+export const DIAGNOSIS_TYPE_LABELS: Record<string, string> = {
+  DAILY: '日诊断',
+  WEEKLY: '周诊断',
+  MONTHLY: '月诊断',
+  MANUAL: '手动诊断',
 };

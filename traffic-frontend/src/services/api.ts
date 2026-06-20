@@ -707,4 +707,45 @@ export const audioEventApi = {
     request.put<any, Result<any>>('/api/ai/audio/config', data),
 };
 
+export const videoQualityApi = {
+  dashboard: () =>
+    request.get<any, Result<any>>('/api/video-quality/dashboard'),
+  pageRecords: (params: any) =>
+    request.get<any, Result<any>>('/api/video-quality/records/page', { params }),
+  getRecord: (id: number) =>
+    request.get<any, Result<any>>(`/api/video-quality/records/${id}`),
+  recentRecords: (cameraId?: number, limit = 10) =>
+    request.get<any, Result<any>>('/api/video-quality/records/recent', { params: { cameraId, limit } }),
+  pageDiagnosis: (params: any) =>
+    request.get<any, Result<any>>('/api/video-quality/diagnosis/page', { params }),
+  getDiagnosis: (id: number) =>
+    request.get<any, Result<any>>(`/api/video-quality/diagnosis/${id}`),
+  generateDailyDiagnosis: (cameraId?: number, date?: string) =>
+    request.post<any, Result<any>>('/api/video-quality/diagnosis/generate/daily', null, { params: { cameraId, date } }),
+  generateAllDiagnosis: (date?: string) =>
+    request.post<any, Result<any>>('/api/video-quality/diagnosis/generate/all', null, { params: { date } }),
+  generateWeeklyDiagnosis: (cameraId?: number, weekStartDate?: string) =>
+    request.post<any, Result<any>>('/api/video-quality/diagnosis/generate/weekly', null, { params: { cameraId, weekStartDate } }),
+  patrolReport: (params: {
+    cameraId?: number;
+    startTime?: string;
+    endTime?: string;
+    routeId?: number;
+  }) =>
+    request.post<any, Result<any>>('/api/video-quality/patrol/report', params),
+  manualDetect: (data: {
+    cameraId: number;
+    frameUrl?: string;
+  }) =>
+    request.post<any, Result<any>>('/api/video-quality/detect/manual', data),
+  batchMockDetect: (data: {
+    cameraIds?: number[];
+    count?: number;
+    abnormalTypes?: string[];
+  }) =>
+    request.post<any, Result<any>>('/api/video-quality/detect/batch-mock', data),
+  ffmpegStatus: () =>
+    request.get<any, Result<any>>('/api/video-quality/ffmpeg/status'),
+};
+
 export default request;

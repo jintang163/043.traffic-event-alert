@@ -138,7 +138,7 @@ public class VideoQualityAnalyzer {
         List<String> abnormalTypes = new ArrayList<>();
 
         switch (mockScenario) {
-            case 0 -> {
+            case 0:
                 result.setBrightness(BigDecimal.valueOf(135.5));
                 result.setBrightnessLevel(1);
                 result.setContrast(BigDecimal.valueOf(65.8));
@@ -157,8 +157,8 @@ public class VideoQualityAnalyzer {
                 result.setQualityLevel(1);
                 result.setIsAbnormal(false);
                 result.setDescription("画面质量正常");
-            }
-            case 1 -> {
+                break;
+            case 1:
                 result.setBrightness(t.getBlackScreenBrightness().subtract(BigDecimal.valueOf(2)));
                 result.setBrightnessLevel(4);
                 result.setContrast(BigDecimal.valueOf(5.2));
@@ -179,8 +179,8 @@ public class VideoQualityAnalyzer {
                 abnormalTypes.add("BLUR");
                 result.setAbnormalTypes(String.join(",", abnormalTypes));
                 result.setDescription("疑似黑屏，请立即排查摄像头");
-            }
-            case 2 -> {
+                break;
+            case 2:
                 result.setBrightness(t.getLowBrightness().subtract(BigDecimal.valueOf(5)));
                 result.setBrightnessLevel(2);
                 result.setContrast(t.getLowContrast().subtract(BigDecimal.valueOf(3)));
@@ -203,8 +203,8 @@ public class VideoQualityAnalyzer {
                 abnormalTypes.add("OCCLUSION");
                 result.setAbnormalTypes(String.join(",", abnormalTypes));
                 result.setDescription("画面偏暗、对比度低，存在轻微遮挡和模糊");
-            }
-            case 3 -> {
+                break;
+            case 3:
                 result.setBrightness(BigDecimal.valueOf(110.0));
                 result.setBrightnessLevel(1);
                 result.setContrast(BigDecimal.valueOf(58.0));
@@ -224,8 +224,8 @@ public class VideoQualityAnalyzer {
                 abnormalTypes.add("OCCLUSION");
                 result.setAbnormalTypes(String.join(",", abnormalTypes));
                 result.setDescription("画面存在严重遮挡，疑似异物或镜头脏污");
-            }
-            case 4 -> {
+                break;
+            case 4:
                 result.setBrightness(BigDecimal.valueOf(125.0));
                 result.setBrightnessLevel(1);
                 result.setContrast(BigDecimal.valueOf(60.0));
@@ -246,8 +246,8 @@ public class VideoQualityAnalyzer {
                 abnormalTypes.add("FREEZE");
                 result.setAbnormalTypes(String.join(",", abnormalTypes));
                 result.setDescription("画面疑似冻结超过3分钟，请检查视频流");
-            }
-            default -> {
+                break;
+            default:
                 result.setBrightness(BigDecimal.valueOf(130.0));
                 result.setBrightnessLevel(1);
                 result.setContrast(BigDecimal.valueOf(62.0));
@@ -265,7 +265,7 @@ public class VideoQualityAnalyzer {
                 result.setQualityLevel(1);
                 result.setIsAbnormal(false);
                 result.setDescription("画面质量正常");
-            }
+                break;
         }
 
         result.setDetectionDurationMs((int) (Math.random() * 50 + 10));
@@ -654,15 +654,33 @@ public class VideoQualityAnalyzer {
         StringBuilder sb = new StringBuilder();
         for (String type : abnormalTypes) {
             switch (type) {
-                case "BLACK_SCREEN" -> sb.append("黑屏; ");
-                case "LOW_BRIGHTNESS" -> sb.append("亮度偏低; ");
-                case "HIGH_BRIGHTNESS" -> sb.append("亮度偏高; ");
-                case "LOW_CONTRAST" -> sb.append("对比度低; ");
-                case "HIGH_CONTRAST" -> sb.append("对比度高; ");
-                case "BLUR" -> sb.append("画面模糊; ");
-                case "OCCLUSION" -> sb.append("画面遮挡(").append(result.getOcclusionRatio()).append("%); ");
-                case "FREEZE" -> sb.append("画面冻结(").append(result.getFreezeDuration()).append("s); ");
-                case "COLOR_CAST" -> sb.append("画面偏色; ");
+                case "BLACK_SCREEN":
+                    sb.append("黑屏; ");
+                    break;
+                case "LOW_BRIGHTNESS":
+                    sb.append("亮度偏低; ");
+                    break;
+                case "HIGH_BRIGHTNESS":
+                    sb.append("亮度偏高; ");
+                    break;
+                case "LOW_CONTRAST":
+                    sb.append("对比度低; ");
+                    break;
+                case "HIGH_CONTRAST":
+                    sb.append("对比度高; ");
+                    break;
+                case "BLUR":
+                    sb.append("画面模糊; ");
+                    break;
+                case "OCCLUSION":
+                    sb.append("画面遮挡(").append(result.getOcclusionRatio()).append("%); ");
+                    break;
+                case "FREEZE":
+                    sb.append("画面冻结(").append(result.getFreezeDuration()).append("s); ");
+                    break;
+                case "COLOR_CAST":
+                    sb.append("画面偏色; ");
+                    break;
             }
         }
         sb.append("综合评分: ").append(result.getOverallScore());

@@ -46,6 +46,7 @@ video:
   enabled: true
   quality:
     enabled: true
+    enableRealFrameCapture: true
     detectionIntervalMinutes: 15
     concurrentDetectionLimit: 10
     abnormalTriggerThreshold: 3

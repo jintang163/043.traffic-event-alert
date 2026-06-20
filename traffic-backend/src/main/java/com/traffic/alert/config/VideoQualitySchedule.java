@@ -5,16 +5,20 @@ import com.traffic.alert.entity.Camera;
 import com.traffic.alert.service.CameraService;
 import com.traffic.alert.service.VideoQualityAnalyzer;
 import com.traffic.alert.service.VideoQualityService;
+import com.traffic.alert.service.VideoRecordingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.awt.image.BufferedImage;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -26,8 +30,10 @@ public class VideoQualitySchedule {
     private final CameraService cameraService;
     private final VideoQualityAnalyzer analyzer;
     private final VideoQualityService videoQualityService;
+    private final VideoRecordingService videoRecordingService;
 
     private final Random random = new Random();
+    private final Map<Long, BufferedImage> previousFrameMap = new ConcurrentHashMap<>();
 
     @Scheduled(fixedDelayString = "${video.quality.detectionIntervalMinutes:15} * 60 * 1000")
     public void scheduledQualityDetection() {
@@ -49,14 +55,25 @@ public class VideoQualitySchedule {
 
             AtomicInteger successCount = new AtomicInteger(0);
             AtomicInteger abnormalCount = new AtomicInteger(0);
+            AtomicInteger realFrameCount = new AtomicInteger(0);
+            AtomicInteger mockFallbackCount = new AtomicInteger(0);
 
             for (int i = 0; i < cameras.size(); i++) {
                 Camera camera = cameras.get(i);
                 try {
-                    int scenario = decideScenario(camera);
-                    VideoQualityAnalysisResult result = analyzer.analyzeMock(
-                            camera.getId(), camera.getCameraName(), scenario
-                    );
+                    VideoQualityAnalysisResult result = detectSingleCamera(camera);
+
+                    if (result == null) {
+                        log.warn("检测结果为空: cameraId={}, cameraName={}", camera.getId(), camera.getCameraName());
+                        continue;
+                    }
+
+                    if (Boolean.TRUE.equals(result.getIsRealFrame())) {
+                        realFrameCount.incrementAndGet();
+                    } else {
+                        mockFallbackCount.incrementAndGet();
+                    }
+
                     videoQualityService.saveDetectionResult(result);
                     successCount.incrementAndGet();
                     if (Boolean.TRUE.equals(result.getIsAbnormal())) {
@@ -72,12 +89,65 @@ public class VideoQualitySchedule {
             }
 
             long cost = System.currentTimeMillis() - start;
-            log.info("========== 定时视频质量检测完成: 成功={}, 异常={}, 耗时={}ms ==========",
-                    successCount.get(), abnormalCount.get(), cost);
+            log.info("========== 定时视频质量检测完成: 成功={}, 异常={}, 真实帧={}, 模拟={}, 耗时={}ms ==========",
+                    successCount.get(), abnormalCount.get(), realFrameCount.get(), mockFallbackCount.get(), cost);
 
         } catch (Exception e) {
             log.error("定时视频质量检测异常: {}", e.getMessage(), e);
         }
+    }
+
+    private VideoQualityAnalysisResult detectSingleCamera(Camera camera) {
+        Long cameraId = camera.getId();
+        String cameraName = camera.getCameraName();
+        String streamUrl = camera.getStreamUrl();
+
+        BufferedImage previousFrame = previousFrameMap.get(cameraId);
+
+        if (Boolean.TRUE.equals(config.getEnableRealFrameCapture())
+                && streamUrl != null && !streamUrl.trim().isEmpty()
+                && videoRecordingService.isFfmpegAvailable()) {
+
+            long captureStart = System.currentTimeMillis();
+            BufferedImage currentFrame = videoRecordingService.captureFrame(streamUrl);
+            long captureCost = System.currentTimeMillis() - captureStart;
+
+            if (currentFrame != null) {
+                log.debug("摄像头[{}]抓帧成功: {}x{}, 耗时={}ms", cameraId,
+                        currentFrame.getWidth(), currentFrame.getHeight(), captureCost);
+
+                VideoQualityAnalysisResult result = analyzer.analyze(
+                        cameraId, cameraName, currentFrame, previousFrame);
+
+                if (previousFrame != null) {
+                    previousFrame.flush();
+                }
+                previousFrameMap.put(cameraId, currentFrame);
+
+                result.setIsRealFrame(true);
+                result.setFrameCaptureCostMs(captureCost);
+                return result;
+            } else {
+                log.warn("摄像头[{}]抓帧失败，将使用模拟数据作为兜底，streamUrl={}",
+                        cameraId, maskUrl(streamUrl));
+            }
+        }
+
+        int scenario = decideScenario(camera);
+        VideoQualityAnalysisResult result = analyzer.analyzeMock(cameraId, cameraName, scenario);
+        result.setIsRealFrame(false);
+        result.setFrameCaptureCostMs(0L);
+        return result;
+    }
+
+    private String maskUrl(String url) {
+        if (url == null) return null;
+        int atIndex = url.indexOf('@');
+        if (atIndex > 0) {
+            int protocolEnd = url.indexOf("://") + 3;
+            return url.substring(0, protocolEnd) + "***:***@" + url.substring(atIndex + 1);
+        }
+        return url;
     }
 
     private int decideScenario(Camera camera) {

@@ -28,6 +28,8 @@ import VirtualPatrol from '@/pages/VirtualPatrol';
 import StormSuppression from '@/pages/StormSuppression';
 import ConstructionZones from '@/pages/ConstructionZones';
 import AudioEvents from '@/pages/AudioEvents';
+import VideoQualityDashboard from '@/pages/VideoQualityDashboard';
+import VideoPatrolReport from '@/pages/VideoPatrolReport';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -268,6 +270,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AudioEvents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/video-quality"
+          element={
+            <ProtectedRoute>
+              <VideoQualityDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/video-patrol"
+          element={
+            <ProtectedRoute>
+              <VideoPatrolReport />
             </ProtectedRoute>
           }
         />

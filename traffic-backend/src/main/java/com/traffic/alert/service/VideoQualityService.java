@@ -79,6 +79,8 @@ public class VideoQualityService {
         record.setAlertTriggered(0);
         record.setDetectionDurationMs(result.getDetectionDurationMs());
         record.setAlgorithmVersion(result.getAlgorithmVersion());
+        record.setIsRealFrame(Boolean.TRUE.equals(result.getIsRealFrame()) ? 1 : 0);
+        record.setFrameCaptureCostMs(result.getFrameCaptureCostMs());
         record.setDescription(result.getDescription());
 
         recordMapper.insert(record);

@@ -59,4 +59,8 @@ public class VideoQualityAnalysisResult {
     private Integer detectionDurationMs;
 
     private String algorithmVersion;
+
+    private Boolean isRealFrame;
+
+    private Long frameCaptureCostMs;
 }

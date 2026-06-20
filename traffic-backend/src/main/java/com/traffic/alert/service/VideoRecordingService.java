@@ -10,8 +10,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -359,5 +363,124 @@ public class VideoRecordingService {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public BufferedImage captureFrame(String streamUrl) {
+        return captureFrame(streamUrl, 3, 1280);
+    }
+
+    public BufferedImage captureFrame(String streamUrl, int timeoutSeconds, int maxWidth) {
+        if (streamUrl == null || streamUrl.trim().isEmpty()) {
+            log.warn("视频流URL为空，无法抓取帧");
+            return null;
+        }
+        if (!isFfmpegAvailable()) {
+            log.warn("FFmpeg不可用，无法抓取帧");
+            return null;
+        }
+
+        try {
+            ProcessBuilder pb = buildFrameCaptureCommand(streamUrl, maxWidth);
+            pb.redirectErrorStream(false);
+            log.info("启动ffmpeg抓帧: {}", String.join(" ", pb.command()));
+            Process process = pb.start();
+
+            try (InputStream stdout = process.getInputStream();
+                 InputStream stderr = process.getErrorStream()) {
+
+                byte[] frameData = stdout.readAllBytes();
+
+                StringBuilder errBuilder = new StringBuilder();
+                try (BufferedReader errReader = new BufferedReader(new InputStreamReader(stderr))) {
+                    String line;
+                    int errLines = 0;
+                    while ((line = errReader.readLine()) != null && errLines < 20) {
+                        errBuilder.append(line).append("\n");
+                        errLines++;
+                    }
+                }
+
+                boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+                if (!finished) {
+                    process.destroyForcibly();
+                    log.warn("ffmpeg抓帧超时（{}s），stderr: {}", timeoutSeconds, errBuilder);
+                    return null;
+                }
+
+                int exitCode = process.exitValue();
+                if (exitCode != 0) {
+                    log.warn("ffmpeg抓帧exitCode={}, stderr: {}", exitCode, errBuilder);
+                    return null;
+                }
+
+                if (frameData == null || frameData.length < 100) {
+                    log.warn("ffmpeg抓帧数据为空或过小，size={}", frameData != null ? frameData.length : 0);
+                    return null;
+                }
+
+                try (ByteArrayInputStream bais = new ByteArrayInputStream(frameData)) {
+                    BufferedImage image = ImageIO.read(bais);
+                    if (image == null) {
+                        log.warn("ImageIO解析帧数据失败，数据长度={}", frameData.length);
+                        return null;
+                    }
+                    log.debug("ffmpeg抓帧成功: {}x{}, size={}bytes", image.getWidth(), image.getHeight(), frameData.length);
+                    return image;
+                }
+            }
+        } catch (Exception e) {
+            log.error("调用ffmpeg抓帧失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private ProcessBuilder buildFrameCaptureCommand(String streamUrl, int maxWidth) {
+        java.util.List<String> cmd = new java.util.ArrayList<>();
+        cmd.add(videoConfig.getFfmpegPath());
+        cmd.add("-y");
+        cmd.add("-loglevel");
+        cmd.add("error");
+
+        boolean isRtsp = streamUrl.startsWith("rtsp://");
+        boolean isRtmp = streamUrl.startsWith("rtmp://");
+        boolean isUrl = streamUrl.startsWith("http://") || streamUrl.startsWith("https://");
+
+        if (isRtsp) {
+            cmd.add("-rtsp_transport");
+            cmd.add("tcp");
+            cmd.add("-stimeout");
+            cmd.add("5000000");
+        }
+
+        cmd.add("-i");
+        cmd.add(streamUrl);
+
+        cmd.add("-frames:v");
+        cmd.add("1");
+
+        cmd.add("-vf");
+        String vf = String.format("scale=%d:-2", maxWidth);
+        cmd.add(vf);
+
+        cmd.add("-f");
+        cmd.add("image2");
+        cmd.add("-vcodec");
+        cmd.add("bmp");
+        cmd.add("pipe:1");
+
+        return new ProcessBuilder(cmd);
+    }
+
+    public java.util.Map<String, Object> captureFrameWithMetadata(String streamUrl) {
+        long start = System.currentTimeMillis();
+        BufferedImage frame = captureFrame(streamUrl);
+        long cost = System.currentTimeMillis() - start;
+        return java.util.Map.of(
+                "success", frame != null,
+                "frame", frame,
+                "costMs", cost,
+                "width", frame != null ? frame.getWidth() : 0,
+                "height", frame != null ? frame.getHeight() : 0
+        );
     }
 }

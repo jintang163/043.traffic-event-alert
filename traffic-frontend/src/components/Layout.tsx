@@ -24,6 +24,8 @@ import {
   SafetyOutlined,
   ThunderboltOutlined,
   AudioOutlined,
+  SafetyOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
@@ -136,6 +138,23 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: '/audio-events',
       icon: <AudioOutlined />,
       label: '音频异常事件',
+    },
+    {
+      key: 'sub_video_quality',
+      icon: <MonitorOutlined />,
+      label: '视频质量诊断',
+      children: [
+        {
+          key: '/video-quality',
+          icon: <SafetyOutlined />,
+          label: '健康度看板',
+        },
+        {
+          key: '/video-patrol',
+          icon: <FileSearchOutlined />,
+          label: '设备巡检报表',
+        },
+      ],
     },
     {
       key: 'sub_rule_engine',

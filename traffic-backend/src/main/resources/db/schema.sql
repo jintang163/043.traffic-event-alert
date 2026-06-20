@@ -1331,6 +1331,8 @@ CREATE TABLE IF NOT EXISTS video_quality_record (
     source_node_code VARCHAR(64) COMMENT '来源边缘节点编码',
     detection_duration_ms INT COMMENT '检测耗时毫秒',
     algorithm_version VARCHAR(64) COMMENT '检测算法版本',
+    is_real_frame INT DEFAULT 0 COMMENT '是否真实帧检测 0-否(模拟) 1-是',
+    frame_capture_cost_ms BIGINT DEFAULT 0 COMMENT '帧抓取耗时毫秒',
     extra_data TEXT COMMENT '扩展数据JSON',
     description VARCHAR(1024) COMMENT '描述',
     create_time DATETIME,

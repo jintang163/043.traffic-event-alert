@@ -13,6 +13,8 @@ public class VideoQualityConfig {
 
     private Boolean enabled = true;
 
+    private Boolean enableRealFrameCapture = true;
+
     private Integer detectionIntervalMinutes = 15;
 
     private Integer concurrentDetectionLimit = 10;
