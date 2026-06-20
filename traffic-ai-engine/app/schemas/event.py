@@ -24,6 +24,9 @@ class EventType(str, Enum):
     CONE_MISSING = "CONE_MISSING"
     CONSTRUCTION_SPEEDING = "CONSTRUCTION_SPEEDING"
     CONSTRUCTION_INTRUSION = "CONSTRUCTION_INTRUSION"
+    HORN = "HORN"
+    COLLISION_SOUND = "COLLISION_SOUND"
+    SIREN = "SIREN"
 
 
 class EventSeverity(int, Enum):
@@ -132,3 +135,17 @@ class ConeDetectionCallbackRequest(BaseModel):
 class ConstructionPlanConfigRequest(BaseModel):
     cameraId: int
     planConfig: Dict[str, Any]
+
+
+class AudioEventCallbackRequest(BaseModel):
+    eventNo: Optional[str] = None
+    cameraId: Optional[int] = None
+    eventType: str = Field(description="音频事件类型: HORN/COLLISION_SOUND/SIREN")
+    confidence: float = Field(description="置信度")
+    duration: float = Field(description="持续时间(秒)")
+    peakDb: Optional[float] = Field(None, description="峰值分贝")
+    avgDb: Optional[float] = Field(None, description="平均分贝")
+    dominantFreq: Optional[float] = Field(None, description="主频率(Hz)")
+    eventTime: Optional[datetime] = None
+    description: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None

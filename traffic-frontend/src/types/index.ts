@@ -428,6 +428,10 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   RED_LIGHT: '闯红灯',
   WRONG_WAY: '逆向行驶',
   ILLEGAL_PARKING: '违章停车',
+  HORN: '长时间鸣笛',
+  COLLISION_SOUND: '碰撞声',
+  SIREN: '警笛声',
+  ABNORMAL_NOISE: '异常噪音',
 };
 
 export const FENCE_TYPE_LABELS: Record<number, string> = {
@@ -465,6 +469,10 @@ export const EVENT_TYPE_COLORS: Record<string, string> = {
   STOPPED_VEHICLE: 'magenta',
   CONGESTION: 'geekblue',
   SPEEDING: 'volcano',
+  HORN: 'orange',
+  COLLISION_SOUND: 'red',
+  SIREN: 'blue',
+  ABNORMAL_NOISE: 'default',
 };
 
 export const EVENT_LEVEL_LABELS: Record<number, string> = {
@@ -1313,3 +1321,40 @@ export interface CameraWeatherInfo {
   recordTime?: string;
   locationName?: string;
 }
+
+export interface AudioEvent {
+  id: number;
+  eventNo: string;
+  cameraId: number;
+  cameraName?: string;
+  eventType: 'HORN' | 'COLLISION_SOUND' | 'SIREN' | 'ABNORMAL_NOISE' | string;
+  confidence: number;
+  duration: number;
+  peakDb?: number;
+  avgDb?: number;
+  dominantFreq?: number;
+  eventTime: string;
+  description?: string;
+  longitude?: number;
+  latitude?: number;
+  location?: string;
+  alertStatus: number;
+  linkedAlertEventId?: number;
+  ambientDb?: number;
+  audioClipUrl?: string;
+  createTime?: string;
+}
+
+export const AUDIO_EVENT_TYPE_LABELS: Record<string, string> = {
+  HORN: '长时间鸣笛',
+  COLLISION_SOUND: '碰撞声',
+  SIREN: '警笛声',
+  ABNORMAL_NOISE: '异常噪音',
+};
+
+export const AUDIO_EVENT_TYPE_COLORS: Record<string, string> = {
+  HORN: '#fa8c16',
+  COLLISION_SOUND: '#ff4d4f',
+  SIREN: '#1890ff',
+  ABNORMAL_NOISE: '#8c8c8c',
+};

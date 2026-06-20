@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     WEATHER_DATA_ENABLED: bool = Field(default=False, env="WEATHER_DATA_ENABLED")
     WEATHER_DATA_API_URL: str = Field(default="http://localhost:8080/api/weather/latest", env="WEATHER_DATA_API_URL")
 
+    AUDIO_DETECTION_ENABLED: bool = Field(default=False, env="AUDIO_DETECTION_ENABLED")
+    AUDIO_SAMPLE_RATE: int = Field(default=16000, env="AUDIO_SAMPLE_RATE")
+    AUDIO_CHUNK_SIZE: int = Field(default=1024, env="AUDIO_CHUNK_SIZE")
+    AUDIO_CHANNELS: int = Field(default=1, env="AUDIO_CHANNELS")
+    AUDIO_CALLBACK_URL: str = Field(default="http://localhost:8080/api/ai/audio/callback", env="AUDIO_CALLBACK_URL")
+    AUDIO_HORN_MIN_DURATION: float = Field(default=1.5, env="AUDIO_HORN_MIN_DURATION")
+    AUDIO_HORN_MIN_DB: float = Field(default=75.0, env="AUDIO_HORN_MIN_DB")
+    AUDIO_COLLISION_MIN_DB: float = Field(default=85.0, env="AUDIO_COLLISION_MIN_DB")
+    AUDIO_EVENT_COOLDOWN: float = Field(default=30.0, env="AUDIO_EVENT_COOLDOWN")
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -964,6 +964,10 @@ public class AlertEventService {
             case "CONE_MISSING", "CONE_ABNORMAL", "CONSTRUCTION_CONE_MISSING" -> "CONE_MISSING";
             case "STOPPED_VEHICLE", "STOP", "PARKING" -> "STOPPED_VEHICLE";
             case "CONGESTION", "TRAFFIC_JAM" -> "CONGESTION";
+            case "HORN", "LONG_HORN" -> "HORN";
+            case "COLLISION", "COLLISION_SOUND" -> "COLLISION_SOUND";
+            case "SIREN" -> "SIREN";
+            case "ABNORMAL_NOISE" -> "ABNORMAL_NOISE";
             default -> eventType.toUpperCase();
         };
     }

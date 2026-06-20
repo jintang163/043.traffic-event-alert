@@ -694,4 +694,13 @@ export const constructionApi = {
     request.delete<any, Result<any>>(`/api/construction/cones/${id}`),
 };
 
+export const audioEventApi = {
+  page: (params: any) =>
+    request.get<any, Result<any>>('/api/ai/audio/page', { params }),
+  getById: (id: number) =>
+    request.get<any, Result<any>>(`/api/ai/audio/${id}`),
+  statistics: () =>
+    request.get<any, Result<any>>('/api/ai/audio/statistics'),
+};
+
 export default request;

@@ -21,4 +21,9 @@ public final class EventType {
     public static final String CONE_MISSING = "CONE_MISSING";
     public static final String CONSTRUCTION_SPEEDING = "CONSTRUCTION_SPEEDING";
     public static final String CONSTRUCTION_INTRUSION = "CONSTRUCTION_INTRUSION";
+
+    public static final String HORN = "HORN";
+    public static final String COLLISION_SOUND = "COLLISION_SOUND";
+    public static final String SIREN = "SIREN";
+    public static final String ABNORMAL_NOISE = "ABNORMAL_NOISE";
 }

@@ -19,7 +19,7 @@ from app.core.tracker import get_tracker, reset_tracker, TrackState
 from app.core.cross_camera_tracker import cross_camera_tracker
 from app.core.feature_extractor import plate_recognizer, reid_extractor
 from app.core.image_enhancer import night_backlight_enhancer, WeatherCondition
-from app.schemas.event import AiEventCallbackRequest, ConeDetectionCallbackRequest
+from app.schemas.event import AiEventCallbackRequest, ConeDetectionCallbackRequest, AudioEventCallbackRequest, EventType, EventSeverity
 from app.schemas.reid import CrossCameraTrackRequest, LicensePlateResult, ReIDFeature
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,10 @@ class StreamProcessor:
 
             reset_tracker(str(camera_id))
 
+            if settings.AUDIO_DETECTION_ENABLED:
+                from app.core.audio_detector import audio_detector
+                audio_detector.start_audio_stream(str(camera_id))
+
             thread = threading.Thread(
                 target=self._process_stream_loop,
                 args=(stream_info,),
@@ -137,6 +141,10 @@ class StreamProcessor:
 
             if "frame_buffer" in stream_info:
                 stream_info["frame_buffer"].clear()
+
+            if settings.AUDIO_DETECTION_ENABLED:
+                from app.core.audio_detector import audio_detector
+                audio_detector.stop_audio_stream(str(camera_id))
 
             reset_tracker(str(camera_id))
 
@@ -331,6 +339,18 @@ class StreamProcessor:
 
                 events = analyze_result[0] if isinstance(analyze_result, tuple) else analyze_result
                 cone_detection_result = analyze_result[1] if isinstance(analyze_result, tuple) and len(analyze_result) > 1 else None
+
+                if settings.AUDIO_DETECTION_ENABLED:
+                    from app.core.audio_detector import audio_detector
+                    audio_events = audio_detector.check_completed_events(str(camera_id))
+                    for audio_event in audio_events:
+                        threading.Thread(
+                            target=self._send_audio_event_callback,
+                            args=(camera_id, audio_event),
+                            daemon=True
+                        ).start()
+
+                        self._enhance_events_with_audio(events, audio_event)
 
                 for event in events:
                     if not stream_info["recording_lock"].locked():
@@ -842,6 +862,92 @@ class StreamProcessor:
 
     def _send_cone_detection_callback(self, detection_result: Dict):
         asyncio.run(self._send_cone_detection_callback_async(detection_result))
+
+    def _send_audio_event_callback(self, camera_id: int, audio_event):
+        if not settings.BACKEND_ENABLE_CALLBACK:
+            return
+
+        try:
+            event_no = f"EVT{datetime.now().strftime('%Y%m%d%H%M%S')}{camera_id:04d}{uuid.uuid4().hex[:4]}"
+
+            event_type_map = {
+                "HORN": EventType.HORN,
+                "COLLISION": EventType.COLLISION_SOUND,
+                "SIREN": EventType.SIREN,
+                "ABNORMAL_NOISE": EventType.COLLISION_SOUND,
+            }
+            mapped_type = event_type_map.get(audio_event.event_type, EventType.HORN)
+
+            type_label_map = {
+                "HORN": "长时间鸣笛",
+                "COLLISION": "碰撞声",
+                "SIREN": "警笛声",
+                "ABNORMAL_NOISE": "异常噪音",
+            }
+            type_label = type_label_map.get(audio_event.event_type, "音频异常")
+
+            callback_data = AudioEventCallbackRequest(
+                eventNo=event_no,
+                cameraId=camera_id,
+                eventType=mapped_type.value,
+                confidence=audio_event.confidence,
+                duration=audio_event.duration,
+                peakDb=audio_event.peak_db,
+                avgDb=audio_event.avg_db,
+                dominantFreq=audio_event.dominant_freq,
+                eventTime=datetime.fromtimestamp(audio_event.timestamp) if audio_event.timestamp else None,
+                description=f"检测到{type_label}，持续{audio_event.duration:.1f}秒，"
+                           f"峰值{audio_event.peak_db:.1f}dB，主频{audio_event.dominant_freq:.0f}Hz",
+                metadata=audio_event.metadata,
+            )
+
+            asyncio.run(self._do_send_audio_callback(callback_data))
+        except Exception as e:
+            logger.error(f"Failed to send audio event callback: {e}")
+
+    async def _do_send_audio_callback(self, callback_data: AudioEventCallbackRequest):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    settings.AUDIO_CALLBACK_URL,
+                    json=callback_data.model_dump(mode="json")
+                )
+                logger.info(
+                    f"Audio event callback sent: type={callback_data.eventType}, "
+                    f"duration={callback_data.duration:.1f}s, status={response.status_code}"
+                )
+        except Exception as e:
+            logger.error(f"Audio event callback send failed: {e}")
+
+    def _enhance_events_with_audio(self, events: List, audio_event):
+        if not events or not audio_event:
+            return
+
+        from app.schemas.event import TrafficEvent, EventSeverity
+
+        for event in events:
+            if audio_event.event_type == AudioEventType.COLLISION and event.event_type == EventType.ACCIDENT:
+                boost = min(0.15, audio_event.confidence * 0.15)
+                event.confidence = min(0.99, event.confidence + boost)
+                if event.metadata is None:
+                    event.metadata = {}
+                event.metadata["audio_collision_detected"] = True
+                event.metadata["audio_peak_db"] = audio_event.peak_db
+                event.metadata["audio_confidence"] = audio_event.confidence
+                if event.severity.value < EventSeverity.HIGH.value:
+                    event.severity = EventSeverity.HIGH
+                logger.info(
+                    f"Accident event enhanced by collision sound: camera={event.location.camera_id}, "
+                    f"confidence boosted from {event.confidence - boost:.3f} to {event.confidence:.3f}"
+                )
+
+            elif audio_event.event_type == AudioEventType.HORN and event.event_type == EventType.CONGESTION:
+                if event.metadata is None:
+                    event.metadata = {}
+                event.metadata["audio_horn_detected"] = True
+                event.metadata["horn_duration"] = audio_event.duration
+                event.description += f"；伴随长时间鸣笛({audio_event.duration:.1f}秒)"
+                logger.info(f"Congestion event enhanced by horn detection: camera={event.location.camera_id}")
 
     def get_stream_status(self, camera_id: Optional[int] = None) -> Dict:
         with self._lock:
