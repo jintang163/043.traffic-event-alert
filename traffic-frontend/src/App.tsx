@@ -26,6 +26,7 @@ import PoliceSystemConfigs from '@/pages/PoliceSystemConfigs';
 import EdgeNodes from '@/pages/EdgeNodes';
 import VirtualPatrol from '@/pages/VirtualPatrol';
 import StormSuppression from '@/pages/StormSuppression';
+import ConstructionZones from '@/pages/ConstructionZones';
 import React from 'react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -106,6 +107,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <GeoFences />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/construction-zones"
+          element={
+            <ProtectedRoute>
+              <ConstructionZones />
             </ProtectedRoute>
           }
         />

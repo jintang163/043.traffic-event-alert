@@ -112,6 +112,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       label: '电子围栏',
     },
     {
+      key: '/construction-zones',
+      icon: <SafetyOutlined />,
+      label: '施工区管控',
+    },
+    {
       key: '/tracks',
       icon: <CarOutlined />,
       label: '目标轨迹',

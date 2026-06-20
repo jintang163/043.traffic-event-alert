@@ -19,6 +19,8 @@ class EventType(str, Enum):
     PEDESTRIAN_CROSSING = "pedestrian_crossing"
     PEDESTRIAN_INTRUSION = "PEDESTRIAN_INTRUSION"
     TRAFFIC_CONGESTION = "traffic_congestion"
+    CONE_MISSING = "CONE_MISSING"
+    CONSTRUCTION_SPEEDING = "CONSTRUCTION_SPEEDING"
 
 
 class EventSeverity(int, Enum):

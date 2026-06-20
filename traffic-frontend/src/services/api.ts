@@ -656,4 +656,42 @@ export const patrolRouteApi = {
     request.get<any, Result<any>>('/api/patrol/routes/execution/logs', { params }),
 };
 
+export const constructionApi = {
+  pagePlans: (params: any) =>
+    request.get<any, Result<any>>('/api/construction/plans/page', { params }),
+  getPlan: (id: number) =>
+    request.get<any, Result<any>>(`/api/construction/plans/${id}`),
+  listActivePlans: () =>
+    request.get<any, Result<any>>('/api/construction/plans/active'),
+  listPlansByCamera: (cameraId: number) =>
+    request.get<any, Result<any>>(`/api/construction/plans/camera/${cameraId}`),
+  savePlan: (data: any) =>
+    request.post<any, Result<any>>('/api/construction/plans', data),
+  deletePlan: (id: number) =>
+    request.delete<any, Result<any>>(`/api/construction/plans/${id}`),
+  updatePlanStatus: (id: number, status: number) =>
+    request.post<any, Result<any>>(`/api/construction/plans/${id}/status`, null, { params: { status } }),
+  togglePlanAlert: (id: number, enabled: boolean) =>
+    request.post<any, Result<any>>(`/api/construction/plans/${id}/alert`, null, { params: { enabled } }),
+  startConstruction: (id: number) =>
+    request.post<any, Result<any>>(`/api/construction/plans/${id}/start`),
+  completeConstruction: (id: number) =>
+    request.post<any, Result<any>>(`/api/construction/plans/${id}/complete`),
+  getPlanSummary: (id: number) =>
+    request.get<any, Result<any>>(`/api/construction/plans/${id}/summary`),
+
+  pageConeRecords: (params: any) =>
+    request.get<any, Result<any>>('/api/construction/cones/page', { params }),
+  getConeRecord: (id: number) =>
+    request.get<any, Result<any>>(`/api/construction/cones/${id}`),
+  listConeRecordsByPlan: (planId: number) =>
+    request.get<any, Result<any>>(`/api/construction/cones/plan/${planId}`),
+  getLatestConeRecord: (planId: number) =>
+    request.get<any, Result<any>>(`/api/construction/cones/plan/${planId}/latest`),
+  saveConeRecord: (data: any) =>
+    request.post<any, Result<any>>('/api/construction/cones', data),
+  deleteConeRecord: (id: number) =>
+    request.delete<any, Result<any>>(`/api/construction/cones/${id}`),
+};
+
 export default request;
